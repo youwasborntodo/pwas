@@ -110,38 +110,69 @@ const SW_MODEL_EXPORT = `self.addEventListener('install', e => {
 const { JSDOM } = jsDom;
 const attrFileList = []
 const config = {
-  buildDir: 'pwa/',
-  relativeFile: 'sw.js',
+  buildDir: 'static/pwa/', // 资源构建路径，主要包括icon图标等文件，如果此目录单独生成，在使用Nginx反向代理的时候需要对此文件夹做处理
+  scope: './',
+  redirectPath: '', // 如果网站开启了nginx反向代理，可能需要对实际访问路径进行配置
+  registerFile: 'sw.js',
   entryScript: 'entry_sw.js',
   defaultEntry: 'index.html', // 如果不指定入口文件，默认在执行目录下查找index.html
-  relativeFilePath: null,
   iconsPath: 'icons/',
+  relativeFilePath: '',
   isBuild: false,
   isEntry: false, // 判断是否指定入口文件
   isDefault: true, // 是否执行默认操作      
   relativePath: process.cwd() ? process.cwd() : process.env.pwd,
-  icons: [{
-    "src": "/img/icon_s.png",
-    "sizes": "48x48",
-    "type": "image/png"
-  },{
-    "src": "/img/icon.png",
-    "sizes": "96x96",
-    "type": "image/png"
-  },{
-    "src": "/img/icon_m.png",
-    "sizes": "152x152",
-    "type": "image/png"
-  },{
-    "src": "/img/icon_x.png",
-    "sizes": "192x192",
-    "type": "image/png"
-  },{
-    "src": "/img/icon_xx.png",
-    "sizes": "256x256",
-    "type": "image/png"
-  }]
+  name: 'PWAs应用',
+  manifest: {
+    icons: [{
+      "src": "/img/icon_ss.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },{
+      "src": "/img/icon_s.png",
+      "sizes": "48x48",
+      "type": "image/png"
+    },{
+      "src": "/img/icon.png",
+      "sizes": "96x96",
+      "type": "image/png"
+    },{
+      "src": "/img/icon_m.png",
+      "sizes": "152x152",
+      "type": "image/png"
+    },{
+      "src": "/img/apple-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },{
+      "src": "/img/icon_x.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },{
+      "src": "/img/icon_xx.png",
+      "sizes": "256x256",
+      "type": "image/png"
+    }]
+  }
 }
+const pwarcPath = config.relativePath + '\\.pwarc'
+// console.log('pwarcPath======', pwarcPath)
+fs.readFile(pwarcPath, 'utf-8', (err, data) => {
+  // 读取默认配置
+  if (!err) {
+    console.log('读取配置文件.....')
+    const pwarc = JSON.parse(data)
+    config.buildDir = pwarc.buildDir
+    config.scope = pwarc.scope
+    config.redirectPath = pwarc.redirectPath
+    config.registerFile = pwarc.registerFile
+    config.entryScript = pwarc.entryScript
+    config.iconsPath = pwarc.iconsPath
+    config.manifest = pwarc.manifest
+  } else {
+    console.log('使用默认配置......')
+  }
+})
 const exceptFile= [
   'node_modules',
   'package.json',
@@ -154,6 +185,21 @@ program.command('version')
   .action(function() {
     config.isDefault = false
     console.log('当前版本:', PKG.version)
+  })
+
+program.command('init')
+  .description('生成.pwarc配置文件')
+  .action(function(){
+    config.isDefault = false
+    const dir = __dirname + '/pwarc.json'
+    console.log('PWArc--------', dir)
+    fs.readFile(dir, 'utf-8', (err, data) => {
+      if(err) {
+        console.log(err)
+        throw new Error('配置文件创建失败！')
+      }
+      createFile(pwarcPath, data)
+    })
   })
 
 program.command('entry <file>')
@@ -228,15 +274,15 @@ function entryFile(file) {
   // 入口文件
   let filePath = null
   let fileName = null
-  let path = null
+  let fileFath = null
   if (/\//mg.test(file)) {
     //  判断是否带有路径
     if (/(^.+\/)(\S+.html)$/mg.test(file)) {
       const fileExec = /(^.+\/)(\S+.html)$/mg.exec(file)
-      path = fileExec[1]
+      fileFath = fileExec[1]
       fileName = fileExec[2]
       config.defaultEntry = fileName
-      config.relativeFilePath = path
+      config.relativeFilePath = fileFath
     } else {
       throw new Error('请确认输入的路径格式是否正确！')
     }
@@ -271,18 +317,34 @@ function entryFile(file) {
     }
     htmlText = data;
     let newHTML = ''
-    if (!htmlText.includes(`<script src="${config.buildDir}${config.entryScript}"></script>`)) {
+    const entryScript = `<script src="${config.buildDir}${config.entryScript}"></script>`
+    if (!htmlText.includes(entryScript)) {
       // 判断是否己经存在注册入口文件
-      const replaceText = `<script src="${config.buildDir}${config.entryScript}"></script></body>`;
+      const replaceText = `${entryScript}
+      </body>`;
       newHTML = htmlText.replace(`</body>`, replaceText);
     } else {
       newHTML = htmlText
-    }  
-    if (!newHTML.includes(`<link rel="manifest" href="${config.buildDir}manifest.json">`)) {
+    }
+    const manifest = `<link rel="manifest" href="manifest.json">`
+    if (!newHTML.includes(manifest)) {
       // 判断是否己经存在Manifest.json文件
-      const replaceText = `<link rel="manifest" href="${config.buildDir}manifest.json">
+      const replaceText = `${manifest}
       </head>`;
       newHTML = newHTML.replace(`</head>`, replaceText);
+    }
+    const icon = `
+    <link rel="apple-touch-icon" sizes="180x180" href="${config.buildDir}icons/apple-icon.png"/>
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="white">
+    <meta name="apple-mobile-web-app-title" content="${config.name}">
+    <meta name="application-name" content="${config.name}">
+    <link rel="icon" type="image/png" href="${config.buildDir}icons/icon_ss.png" sizes="32x32"/>
+    `
+    if (!newHTML.includes(icon)) {
+      // 判断是否己经存在Manifest.json文件
+      const replaceText = `</title>${icon}`;
+      newHTML = newHTML.replace(`</title>`, replaceText);
     }
     createFile(file, newHTML);
     const htmlDom = new JSDOM(htmlText);
@@ -291,6 +353,22 @@ function entryFile(file) {
     // console.log(attrFileList)
     attrFileList.push(config.defaultEntry);
     const buildPath = config.relativePath + '/' + config.relativeFilePath + config.buildDir
+    // console.log('buildPath=====', buildPath)
+    function mkdirsSync(dirname) {
+      if (fs.existsSync(dirname)){
+        return true
+      } else {
+        if (mkdirsSync(path.dirname(dirname))) {
+          fs.mkdirSync(dirname);
+          console.log('目录创建成功' + dirname);
+          return true;
+        }
+      }
+    }
+    mkdirsSync(config.buildDir, () => {
+      console.log('创建完成！')
+       copyServiceWorkerFile(attrFileList);
+    })
     fs.exists(buildPath, exists => {
       // 创建文件夹是否存在
       if (exists) {
@@ -369,11 +447,11 @@ function getAttrList(node) {
       // console.log(node.nodeName)
   }
 }
-
+const iconsDirPath = `${config.buildDir}${config.iconsPath}`
 const Manifest = `
     {
-      "name": "PWA应用",
-      "short_name": "测试名称",
+      "name": "PWAs",
+      "short_name": "PWAs",
       "description": "这只是一个测试应用！",
       "start_url": "${config.defaultEntry}",
       "display": "standalone",
@@ -381,23 +459,27 @@ const Manifest = `
       "background_color": "#ACE",
       "theme_color": "#ACE",
       "icons": [{
-            "src": "${config.iconsPath}icon_s.png",
+          "src": "${iconsDirPath}icon_ss.png",
+          "sizes": "32x32",
+          "type": "image/png"
+          },{
+            "src": "${iconsDirPath}icon_s.png",
             "sizes": "48x48",
             "type": "image/png"
           },{
-            "src": "${config.iconsPath}icon.png",
+            "src": "${iconsDirPath}icon.png",
             "sizes": "96x96",
             "type": "image/png"
           },{
-            "src": "${config.iconsPath}icon_m.png",
+            "src": "${iconsDirPath}icon_m.png",
             "sizes": "152x152",
             "type": "image/png"
           },{
-            "src": "${config.iconsPath}icon_x.png",
+            "src": "${iconsDirPath}icon_x.png",
             "sizes": "192x192",
             "type": "image/png"
           },{
-            "src": "${config.iconsPath}icon_xx.png",
+            "src": "${iconsDirPath}icon_xx.png",
             "sizes": "256x256",
             "type": "image/png"
           }]
@@ -417,7 +499,7 @@ function createImageFile(source, target) {
         target
       }
       bufferList.push(item)
-      if (bufferList.length == config.icons.length) {
+      if (bufferList.length == config.manifest.icons.length) {
           bufferList.forEach(data => {
             // 处理异步问题
             createFile(data.target, data.buffer)
@@ -429,7 +511,7 @@ function createImageFile(source, target) {
 const bufferList = []
 function multipleCreateImageFile(targetPath) {
   // 批量操作图片文件
-  config.icons.forEach(file => {
+  config.manifest.icons.forEach(file => {
     // console.log(file.src)
     let target = null
     const pathSplit = file.src.split('/')
@@ -457,7 +539,7 @@ function createManifestFile() {
         })
       }
     })
-    const manifestPath = config.relativePath + '/' + config.relativeFilePath + config.buildDir
+    const manifestPath = config.relativePath + '/' + config.relativeFilePath
     // console.log('manifestPath==>', manifestPath)
     fs.exists(manifestPath, exists => {
       if (exists) {
@@ -477,11 +559,11 @@ function createManifestFile() {
 
 function createServiceWorkerFile(data) {
   // 创建Service Worker文件
-  const serviceWorkerFileName = config.relativePath + '/' + config.relativeFilePath + config.relativeFile
+  const serviceWorkerFileName = config.relativePath + '/' + config.relativeFilePath + config.registerFile
   const entryScript = config.relativePath + '/' + config.relativeFilePath + config.buildDir + config.entryScript
   const indexFileData = `
   if (navigator.serviceWorker) {
-    navigator.serviceWorker.register('/${config.relativeFile}', {scope: "/"}).then(res => {
+    navigator.serviceWorker.register('${config.redirectPath}/${config.registerFile}', {scope: "${config.scope}"}).then(res => {
       // console.log('service worker is registered', res)
       let sw = null, state;
       if (res.installing) {

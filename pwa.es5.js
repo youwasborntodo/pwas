@@ -13,44 +13,88 @@ var JSDOM = jsDom.JSDOM;
 
 var attrFileList = [];
 var config = {
-  buildDir: 'pwa/',
-  relativeFile: 'sw.js',
+  buildDir: 'static/pwa/', // 资源构建路径，主要包括icon图标等文件，如果此目录单独生成，在使用Nginx反向代理的时候需要对此文件夹做处理
+  scope: './',
+  redirectPath: '', // 如果网站开启了nginx反向代理，可能需要对实际访问路径进行配置
+  registerFile: 'sw.js',
   entryScript: 'entry_sw.js',
   defaultEntry: 'index.html', // 如果不指定入口文件，默认在执行目录下查找index.html
-  relativeFilePath: null,
   iconsPath: 'icons/',
+  relativeFilePath: '',
   isBuild: false,
   isEntry: false, // 判断是否指定入口文件
   isDefault: true, // 是否执行默认操作      
   relativePath: process.cwd() ? process.cwd() : process.env.pwd,
-  icons: [{
-    "src": "/img/icon_s.png",
-    "sizes": "48x48",
-    "type": "image/png"
-  }, {
-    "src": "/img/icon.png",
-    "sizes": "96x96",
-    "type": "image/png"
-  }, {
-    "src": "/img/icon_m.png",
-    "sizes": "152x152",
-    "type": "image/png"
-  }, {
-    "src": "/img/icon_x.png",
-    "sizes": "192x192",
-    "type": "image/png"
-  }, {
-    "src": "/img/icon_xx.png",
-    "sizes": "256x256",
-    "type": "image/png"
-  }]
+  name: 'PWAs应用',
+  manifest: {
+    icons: [{
+      "src": "/img/icon_ss.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    }, {
+      "src": "/img/icon_s.png",
+      "sizes": "48x48",
+      "type": "image/png"
+    }, {
+      "src": "/img/icon.png",
+      "sizes": "96x96",
+      "type": "image/png"
+    }, {
+      "src": "/img/icon_m.png",
+      "sizes": "152x152",
+      "type": "image/png"
+    }, {
+      "src": "/img/apple-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }, {
+      "src": "/img/icon_x.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }, {
+      "src": "/img/icon_xx.png",
+      "sizes": "256x256",
+      "type": "image/png"
+    }]
+  }
 };
+var pwarcPath = config.relativePath + '\\.pwarc';
+// console.log('pwarcPath======', pwarcPath)
+fs.readFile(pwarcPath, 'utf-8', function (err, data) {
+  // 读取默认配置
+  if (!err) {
+    console.log('读取配置文件.....');
+    var pwarc = JSON.parse(data);
+    config.buildDir = pwarc.buildDir;
+    config.scope = pwarc.scope;
+    config.redirectPath = pwarc.redirectPath;
+    config.registerFile = pwarc.registerFile;
+    config.entryScript = pwarc.entryScript;
+    config.iconsPath = pwarc.iconsPath;
+    config.manifest = pwarc.manifest;
+  } else {
+    console.log('使用默认配置......');
+  }
+});
 var exceptFile = ['node_modules', 'package.json', config.entryScript];
 
 // 定义版本和参数选项
 program.command('version').description('查看当前版本').action(function () {
   config.isDefault = false;
   console.log('当前版本:', PKG.version);
+});
+
+program.command('init').description('生成.pwarc配置文件').action(function () {
+  config.isDefault = false;
+  var dir = __dirname + '/pwarc.json';
+  console.log('PWArc--------', dir);
+  fs.readFile(dir, 'utf-8', function (err, data) {
+    if (err) {
+      console.log(err);
+      throw new Error('配置文件创建失败！');
+    }
+    createFile(pwarcPath, data);
+  });
 });
 
 program.command('entry <file>').description('entry 【file】入口文件配置').action(function (file) {
@@ -86,9 +130,9 @@ program.command('--help').description('查看当前帮助选项').action(functio
   console.log('');
   console.log('pwas entry index.html [Default:默认为空自动寻找 index.html]');
   console.log('');
-});
+}
 // 必须在.parse()之前，因为node的emit()是即时的
-program.parse(process.argv);
+);program.parse(process.argv);
 
 function readFileList(dir) {
   var filesList = arguments.length > 1 && arguments[1] !== undefined ? arguments[1] : [];
@@ -119,15 +163,15 @@ function entryFile(file) {
   // 入口文件
   var filePath = null;
   var fileName = null;
-  var path = null;
+  var fileFath = null;
   if (/\//mg.test(file)) {
     //  判断是否带有路径
     if (/(^.+\/)(\S+.html)$/mg.test(file)) {
       var fileExec = /(^.+\/)(\S+.html)$/mg.exec(file);
-      path = fileExec[1];
+      fileFath = fileExec[1];
       fileName = fileExec[2];
       config.defaultEntry = fileName;
-      config.relativeFilePath = path;
+      config.relativeFilePath = fileFath;
     } else {
       throw new Error('请确认输入的路径格式是否正确！');
     }
@@ -154,17 +198,25 @@ function entryFile(file) {
     }
     htmlText = data;
     var newHTML = '';
-    if (!htmlText.includes('<script src="' + config.buildDir + config.entryScript + '"></script>')) {
+    var entryScript = '<script src="' + config.buildDir + config.entryScript + '"></script>';
+    if (!htmlText.includes(entryScript)) {
       // 判断是否己经存在注册入口文件
-      var replaceText = '<script src="' + config.buildDir + config.entryScript + '"></script></body>';
+      var replaceText = entryScript + '\n      </body>';
       newHTML = htmlText.replace('</body>', replaceText);
     } else {
       newHTML = htmlText;
     }
-    if (!newHTML.includes('<link rel="manifest" href="' + config.buildDir + 'manifest.json">')) {
+    var manifest = '<link rel="manifest" href="manifest.json">';
+    if (!newHTML.includes(manifest)) {
       // 判断是否己经存在Manifest.json文件
-      var _replaceText = '<link rel="manifest" href="' + config.buildDir + 'manifest.json">\n      </head>';
+      var _replaceText = manifest + '\n      </head>';
       newHTML = newHTML.replace('</head>', _replaceText);
+    }
+    var icon = '\n    <link rel="apple-touch-icon" sizes="180x180" href="' + config.buildDir + 'icons/apple-icon.png"/>\n    <meta name="mobile-web-app-capable" content="yes">\n    <meta name="apple-mobile-web-app-status-bar-style" content="white">\n    <meta name="apple-mobile-web-app-title" content="' + config.name + '">\n    <meta name="application-name" content="' + config.name + '">\n    <link rel="icon" type="image/png" href="' + config.buildDir + 'icons/icon_ss.png" sizes="32x32"/>\n    ';
+    if (!newHTML.includes(icon)) {
+      // 判断是否己经存在Manifest.json文件
+      var _replaceText2 = '</title>' + icon;
+      newHTML = newHTML.replace('</title>', _replaceText2);
     }
     createFile(file, newHTML);
     var htmlDom = new JSDOM(htmlText);
@@ -173,6 +225,22 @@ function entryFile(file) {
     // console.log(attrFileList)
     attrFileList.push(config.defaultEntry);
     var buildPath = config.relativePath + '/' + config.relativeFilePath + config.buildDir;
+    // console.log('buildPath=====', buildPath)
+    function mkdirsSync(dirname) {
+      if (fs.existsSync(dirname)) {
+        return true;
+      } else {
+        if (mkdirsSync(path.dirname(dirname))) {
+          fs.mkdirSync(dirname);
+          console.log('目录创建成功' + dirname);
+          return true;
+        }
+      }
+    }
+    mkdirsSync(config.buildDir, function () {
+      console.log('创建完成！');
+      copyServiceWorkerFile(attrFileList);
+    });
     fs.exists(buildPath, function (exists) {
       // 创建文件夹是否存在
       if (exists) {
@@ -194,16 +262,17 @@ function entryFile(file) {
 function copyServiceWorkerFile(list) {
   // 拼接sw.js文件
   var dateTime = new Date();
-  var buildTime = dateTime.toLocaleString().replace(' ', '|');
+  var buildTime = dateTime.toLocaleString().replace(' ', '|'
   // console.log('edition', buildTime)
-  var SW_DATA = '\n    // serviceWorker.js\n    const edition = \'pwas:' + buildTime + '\'\n    const fileList = [\n  ';
+  );var SW_DATA = '\n    // serviceWorker.js\n    const edition = \'pwas:' + buildTime + '\'\n    const fileList = [\n  ';
   list.forEach(function (str) {
     SW_DATA += '\'' + str + '\',\n      ';
   });
   SW_DATA += '\n        ]  \n    ';
   SW_DATA = SW_DATA + SW_MODEL_EXPORT;
-  createServiceWorkerFile(SW_DATA);
+  createServiceWorkerFile(SW_DATA
   // })
+  );
 }
 
 function getChildNodes(node) {
@@ -225,17 +294,17 @@ function getAttrList(node) {
   switch (node.nodeName) {
     case 'LINK':
     case 'A':
-      var href = node.getAttribute('href');
+      var href = node.getAttribute('href'
       // console.log(href)
-      if (href) {
+      );if (href) {
         attrFileList.push(href);
       }
       break;
     case 'SCRIPT':
     case 'IMG':
-      var src = node.getAttribute('src');
+      var src = node.getAttribute('src'
       // console.log(src)
-      if (src) {
+      );if (src) {
         attrFileList.push(src);
       }
       break;
@@ -243,8 +312,8 @@ function getAttrList(node) {
     // console.log(node.nodeName)
   }
 }
-
-var Manifest = '\n    {\n      "name": "PWA\u5E94\u7528",\n      "short_name": "\u6D4B\u8BD5\u540D\u79F0",\n      "description": "\u8FD9\u53EA\u662F\u4E00\u4E2A\u6D4B\u8BD5\u5E94\u7528\uFF01",\n      "start_url": "' + config.defaultEntry + '",\n      "display": "standalone",\n      "orientation": "any",\n      "background_color": "#ACE",\n      "theme_color": "#ACE",\n      "icons": [{\n            "src": "' + config.iconsPath + 'icon_s.png",\n            "sizes": "48x48",\n            "type": "image/png"\n          },{\n            "src": "' + config.iconsPath + 'icon.png",\n            "sizes": "96x96",\n            "type": "image/png"\n          },{\n            "src": "' + config.iconsPath + 'icon_m.png",\n            "sizes": "152x152",\n            "type": "image/png"\n          },{\n            "src": "' + config.iconsPath + 'icon_x.png",\n            "sizes": "192x192",\n            "type": "image/png"\n          },{\n            "src": "' + config.iconsPath + 'icon_xx.png",\n            "sizes": "256x256",\n            "type": "image/png"\n          }]\n    }\n';
+var iconsDirPath = '' + config.buildDir + config.iconsPath;
+var Manifest = '\n    {\n      "name": "PWAs",\n      "short_name": "PWAs",\n      "description": "\u8FD9\u53EA\u662F\u4E00\u4E2A\u6D4B\u8BD5\u5E94\u7528\uFF01",\n      "start_url": "' + config.defaultEntry + '",\n      "display": "standalone",\n      "orientation": "any",\n      "background_color": "#ACE",\n      "theme_color": "#ACE",\n      "icons": [{\n          "src": "' + iconsDirPath + 'icon_ss.png",\n          "sizes": "32x32",\n          "type": "image/png"\n          },{\n            "src": "' + iconsDirPath + 'icon_s.png",\n            "sizes": "48x48",\n            "type": "image/png"\n          },{\n            "src": "' + iconsDirPath + 'icon.png",\n            "sizes": "96x96",\n            "type": "image/png"\n          },{\n            "src": "' + iconsDirPath + 'icon_m.png",\n            "sizes": "152x152",\n            "type": "image/png"\n          },{\n            "src": "' + iconsDirPath + 'icon_x.png",\n            "sizes": "192x192",\n            "type": "image/png"\n          },{\n            "src": "' + iconsDirPath + 'icon_xx.png",\n            "sizes": "256x256",\n            "type": "image/png"\n          }]\n    }\n';
 
 function createImageFile(source, target) {
   // 创建manifest.json 图标
@@ -259,7 +328,7 @@ function createImageFile(source, target) {
         target: target
       };
       bufferList.push(item);
-      if (bufferList.length == config.icons.length) {
+      if (bufferList.length == config.manifest.icons.length) {
         bufferList.forEach(function (data) {
           // 处理异步问题
           createFile(data.target, data.buffer);
@@ -271,7 +340,7 @@ function createImageFile(source, target) {
 var bufferList = [];
 function multipleCreateImageFile(targetPath) {
   // 批量操作图片文件
-  config.icons.forEach(function (file) {
+  config.manifest.icons.forEach(function (file) {
     // console.log(file.src)
     var target = null;
     var pathSplit = file.src.split('/');
@@ -299,7 +368,7 @@ function createManifestFile() {
       });
     }
   });
-  var manifestPath = config.relativePath + '/' + config.relativeFilePath + config.buildDir;
+  var manifestPath = config.relativePath + '/' + config.relativeFilePath;
   // console.log('manifestPath==>', manifestPath)
   fs.exists(manifestPath, function (exists) {
     if (exists) {
@@ -319,9 +388,9 @@ function createManifestFile() {
 
 function createServiceWorkerFile(data) {
   // 创建Service Worker文件
-  var serviceWorkerFileName = config.relativePath + '/' + config.relativeFilePath + config.relativeFile;
+  var serviceWorkerFileName = config.relativePath + '/' + config.relativeFilePath + config.registerFile;
   var entryScript = config.relativePath + '/' + config.relativeFilePath + config.buildDir + config.entryScript;
-  var indexFileData = '\n  if (navigator.serviceWorker) {\n    navigator.serviceWorker.register(\'/' + config.relativeFile + '\', {scope: "/"}).then(res => {\n      // console.log(\'service worker is registered\', res)\n      let sw = null, state;\n      if (res.installing) {\n        sw = res.installing\n        state = \'installing\'\n      } else if (res.waiting) {\n        // \u66F4\u65B0\u5B8C\u6210\u7B49\u5F85\u8FD0\u884C\n        sw = res.waiting\n        state = \'waiting\'\n      } else if (res.active) {\n        // \u66F4\u65B0\u5B8C\u6210\u6FC0\u6D3B\u72B6\u6001\n        sw = res.active\n        state = \'activated\'\n      } else if (res.redundant) {\n        // \u65B0\u7684\u7F13\u5B58\u751F\u6548\u540E\u4E4B\u524D\u7684\u7F13\u5B58\u4F1A\u8FDB\u5165\u6B64\u72B6\u6001\n        sw.res.redundant\n        state = \'redundant\'\n      }\n      if (state) {\n        console.log(\'\u3010---SW---\u3011 state is \' + state)\n        if (state === \'waiting\') {\n          // \u5237\u65B0\u540E\u5224\u65AD\u662F\u5426\u4E3A\u7B49\u5F85\u72B6\u6001\n          // self.skipWaiting()\n        }\n      }\n  \n      if (sw) {\n        sw.onStateChange = () => {\n          console.log(\'sw state is \' + sw.state)\n        }\n      }\n    }).catch(err => {\n      console.error(\'something error is happened\', err)\n    })\n\n  }\n  ';
+  var indexFileData = '\n  if (navigator.serviceWorker) {\n    navigator.serviceWorker.register(\'' + config.redirectPath + '/' + config.registerFile + '\', {scope: "' + config.scope + '"}).then(res => {\n      // console.log(\'service worker is registered\', res)\n      let sw = null, state;\n      if (res.installing) {\n        sw = res.installing\n        state = \'installing\'\n      } else if (res.waiting) {\n        // \u66F4\u65B0\u5B8C\u6210\u7B49\u5F85\u8FD0\u884C\n        sw = res.waiting\n        state = \'waiting\'\n      } else if (res.active) {\n        // \u66F4\u65B0\u5B8C\u6210\u6FC0\u6D3B\u72B6\u6001\n        sw = res.active\n        state = \'activated\'\n      } else if (res.redundant) {\n        // \u65B0\u7684\u7F13\u5B58\u751F\u6548\u540E\u4E4B\u524D\u7684\u7F13\u5B58\u4F1A\u8FDB\u5165\u6B64\u72B6\u6001\n        sw.res.redundant\n        state = \'redundant\'\n      }\n      if (state) {\n        console.log(\'\u3010---SW---\u3011 state is \' + state)\n        if (state === \'waiting\') {\n          // \u5237\u65B0\u540E\u5224\u65AD\u662F\u5426\u4E3A\u7B49\u5F85\u72B6\u6001\n          // self.skipWaiting()\n        }\n      }\n  \n      if (sw) {\n        sw.onStateChange = () => {\n          console.log(\'sw state is \' + sw.state)\n        }\n      }\n    }).catch(err => {\n      console.error(\'something error is happened\', err)\n    })\n\n  }\n  ';
   var pathDir = config.relativePath + '/' + config.relativeFilePath + config.buildDir; // 目前配置是当前路径，后期需要增加自定义路径功能，预留路径判断功能
   // terser 
   var options = {
@@ -337,9 +406,9 @@ function createServiceWorkerFile(data) {
       preamble: "/* minified */"
     }
   };
-  var result = terser.minify(data, options);
+  var result = terser.minify(data, options
   // console.log(pathDir)
-  var uglifyDealWithData = result.code;
+  );var uglifyDealWithData = result.code;
   fs.exists(pathDir, function (exists) {
     if (exists) {
       // 判断当前路径是否存在

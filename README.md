@@ -45,12 +45,27 @@ npm install pwas@latest -D
     "babel-polyfill": "^6.26.0",
   },
   "devDpendencies": {
-    "pwas": "^1.0.1",
+    "pwas": "^1.1.3",
   }
 // ....   
 【"build": "node build/build.js && pwas build dist/index.html"】
  可以使用类似上面的方式集成到生产环境自动化构建脚本后执行
 ```
+
+# 使用自定义配置
+1.进行项目的根目录，等同于package.json文件所在目录
+2.全局安装pwas,如果己经全局安装过，可以跳过此步骤,直接执行pwas init
+``` bash
+  npm install pwas@latest -g
+  pwas init
+```
+3.此时在项目根目录中会生成一个.pwarc文件，可以在此文件中配置manifest.json文件或者注册文件名字的反向代理路径等
+4.修改icons图标请在默认生成的icons图片目录替换，后期加入自定义Icons路径功能
+
+# 常见问题说明
+1.项目必须使用https协议
+2.注意合理处理跨域资源，目前暂时未做资源的跨域缓存处理，如果有使用cdn加速部分资源文件，请在header消息头中配置Access-Control-Allow-Origin：*
+3.项目在服务器上的资源路径如果配置了Nginx反向代理，导致默认路径不能正常访问，请在Nginx上配置好相关资源的反向映射,.pwarc文件中可以配置构建生成的目录位置和注册文件的反向代理位置
 
 PS:说明文档写的比较促忙，如果有看不懂的地方或者错误的地方可以到git上指出，谢谢
 

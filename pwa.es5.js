@@ -20,62 +20,78 @@ var config = {
   entryScript: 'entry_sw.js',
   defaultEntry: 'index.html', // 如果不指定入口文件，默认在执行目录下查找index.html
   iconsPath: 'icons/',
+  manifestUrl: '',
   relativeFilePath: '',
+  isWindows: process.env.os && process.env.os == 'Windows_NT',
   isBuild: false,
+  isConfig: false, // 判断是否读取配置文件
   isEntry: false, // 判断是否指定入口文件
   isDefault: true, // 是否执行默认操作      
   relativePath: process.cwd() ? process.cwd() : process.env.pwd,
-  name: 'PWAs应用',
   manifest: {
+    name: 'PWAs应用',
     icons: [{
-      "src": "/img/icon_ss.png",
+      "src": "icon_ss.png",
       "sizes": "32x32",
       "type": "image/png"
     }, {
-      "src": "/img/icon_s.png",
+      "src": "icon_s.png",
       "sizes": "48x48",
       "type": "image/png"
     }, {
-      "src": "/img/icon.png",
+      "src": "icon.png",
       "sizes": "96x96",
       "type": "image/png"
     }, {
-      "src": "/img/icon_m.png",
+      "src": "icon_m.png",
       "sizes": "152x152",
       "type": "image/png"
     }, {
-      "src": "/img/apple-icon.png",
+      "src": "apple-icon.png",
       "sizes": "180x180",
       "type": "image/png"
     }, {
-      "src": "/img/icon_x.png",
+      "src": "icon_x.png",
       "sizes": "192x192",
       "type": "image/png"
     }, {
-      "src": "/img/icon_xx.png",
+      "src": "icon_xx.png",
       "sizes": "256x256",
       "type": "image/png"
     }]
   }
 };
-var pwarcPath = config.relativePath + '\\.pwarc';
-// console.log('pwarcPath======', pwarcPath)
-fs.readFile(pwarcPath, 'utf-8', function (err, data) {
-  // 读取默认配置
-  if (!err) {
-    console.log('读取配置文件.....');
-    var pwarc = JSON.parse(data);
-    config.buildDir = pwarc.buildDir;
-    config.scope = pwarc.scope;
-    config.redirectPath = pwarc.redirectPath;
-    config.registerFile = pwarc.registerFile;
-    config.entryScript = pwarc.entryScript;
-    config.iconsPath = pwarc.iconsPath;
-    config.manifest = pwarc.manifest;
-  } else {
-    console.log('使用默认配置......');
-  }
-});
+var iconsTargetPath = '' + config.buildDir + config.iconsPath;
+var Manifest = {};
+var iconList = [];
+var pwarcPath = config.isWindows ? config.relativePath + "\\.pwarc" : config.relativePath + "/.pwarc";
+// console.log('pwarcPath======>', pwarcPath)
+function init(file) {
+  fs.readFile(pwarcPath, 'utf-8', function (err, data) {
+    // 读取默认配置
+    if (!err) {
+      console.log('读取配置文件.....');
+      config.isConfig = true;
+      var pwarc = JSON.parse(data);
+      config.buildDir = pwarc.buildDir;
+      config.scope = pwarc.scope;
+      config.redirectPath = pwarc.redirectPath;
+      config.registerFile = pwarc.registerFile;
+      config.entryScript = pwarc.entryScript;
+      // config.iconsPath = pwarc.iconsPath
+      config.manifest = pwarc.manifest;
+      Manifest = pwarc.manifest;
+      Manifest.icons.forEach(function (img) {
+        iconList.push(img.src);
+        img.src = iconsTargetPath + img.src;
+      });
+    } else {
+      console.log('使用默认配置......');
+    }
+    entryFile(file);
+  });
+}
+
 var exceptFile = ['node_modules', 'package.json', config.entryScript];
 
 // 定义版本和参数选项
@@ -84,10 +100,9 @@ program.command('version').description('查看当前版本').action(function () 
   console.log('当前版本:', PKG.version);
 });
 
-program.command('init').description('生成.pwarc配置文件').action(function () {
+program.command('init').description('生成config.pwarc配置文件').action(function () {
   config.isDefault = false;
   var dir = __dirname + '/pwarc.json';
-  console.log('PWArc--------', dir);
   fs.readFile(dir, 'utf-8', function (err, data) {
     if (err) {
       console.log(err);
@@ -101,7 +116,7 @@ program.command('entry <file>').description('entry 【file】入口文件配置'
   // 判断有没有带入文件名，后期加入文件夹前缀功能
   config.isEntry = true;
   config.isDefault = true;
-  entryFile(file);
+  init(file);
 }).on('--help', function () {
   console.log('');
   console.log('Entry file【入口文件配置】:');
@@ -115,7 +130,7 @@ program.command('build <file>').description('build 【file】package.json 脚本
   config.isEntry = true;
   config.isBuild = true;
   config.isDefault = true;
-  entryFile(file);
+  init(file);
 }).on('--help', function () {
   console.log('');
   console.log('Entry file【入口文件配置】:');
@@ -129,6 +144,8 @@ program.command('--help').description('查看当前帮助选项').action(functio
   console.log('entry <file>【入口文件配置】');
   console.log('');
   console.log('pwas entry index.html [Default:默认为空自动寻找 index.html]');
+  console.log('');
+  console.log('pwas init 【生成配置文件.pwarc，项目的package.json目录执行】');
   console.log('');
 }
 // 必须在.parse()之前，因为node的emit()是即时的
@@ -187,7 +204,22 @@ function entryFile(file) {
     // filePath = config.relativePath
     console.log('building.........');
   }
-  filePath = process.env.os && process.env.os == 'Windows_NT' ? config.relativePath + "\\" + file : config.relativePath + "/" + file;
+  if (!config.isConfig) {
+    var dir = __dirname + '/pwarc.json';
+    fs.readFile(dir, 'utf-8', function (err, data) {
+      if (err) {
+        console.log(err);
+        Manifest = config.manifest;
+      }
+      var manifestConfig = JSON.parse(data);
+      Manifest = manifestConfig.manifest;
+      Manifest.icons.forEach(function (img) {
+        iconList.push(img.src);
+        img.src = iconsTargetPath + img.src;
+      });
+    });
+  }
+  filePath = config.isWindows ? config.relativePath + "\\" + file : config.relativePath + "/" + file;
   var htmlText = null;
   // console.log('filePath======>', filePath)
   fs.readFile(filePath, 'utf-8', function (err, data) {
@@ -206,13 +238,16 @@ function entryFile(file) {
     } else {
       newHTML = htmlText;
     }
-    var manifest = '<link rel="manifest" href="manifest.json">';
-    if (!newHTML.includes(manifest)) {
+    var buildTime = new Date().getTime();
+    var manifest = '<link rel="manifest" id="insertManifest" href="manifest.json?t=' + buildTime + '">';
+    if (!newHTML.includes('<link rel="manifest" id="insertManifest"')) {
       // 判断是否己经存在Manifest.json文件
       var _replaceText = manifest + '\n      </head>';
       newHTML = newHTML.replace('</head>', _replaceText);
+    } else {
+      newHTML = newHTML.replace(/manifest.json\?t=\d+/mg, 'manifest.json?t=' + buildTime);
     }
-    var icon = '\n    <link rel="apple-touch-icon" sizes="180x180" href="' + config.buildDir + 'icons/apple-icon.png"/>\n    <meta name="mobile-web-app-capable" content="yes">\n    <meta name="apple-mobile-web-app-status-bar-style" content="white">\n    <meta name="apple-mobile-web-app-title" content="' + config.name + '">\n    <meta name="application-name" content="' + config.name + '">\n    <link rel="icon" type="image/png" href="' + config.buildDir + 'icons/icon_ss.png" sizes="32x32"/>\n    ';
+    var icon = '\n    <link rel="apple-touch-icon" sizes="180x180" href="' + config.buildDir + config.iconsPath + 'apple-icon.png"/>\n    <meta name="mobile-web-app-capable" content="yes">\n    <meta name="apple-mobile-web-app-status-bar-style" content="white">\n    <meta name="apple-mobile-web-app-title" content="' + Manifest.name + '">\n    <meta name="application-name" content="' + Manifest.name + '">\n    <link rel="icon" type="image/png" href="' + config.buildDir + config.iconsPath + 'icon_ss.png" sizes="32x32"/>\n    ';
     if (!newHTML.includes(icon)) {
       // 判断是否己经存在Manifest.json文件
       var _replaceText2 = '</title>' + icon;
@@ -312,8 +347,6 @@ function getAttrList(node) {
     // console.log(node.nodeName)
   }
 }
-var iconsDirPath = '' + config.buildDir + config.iconsPath;
-var Manifest = '\n    {\n      "name": "PWAs",\n      "short_name": "PWAs",\n      "description": "\u8FD9\u53EA\u662F\u4E00\u4E2A\u6D4B\u8BD5\u5E94\u7528\uFF01",\n      "start_url": "' + config.defaultEntry + '",\n      "display": "standalone",\n      "orientation": "any",\n      "background_color": "#ACE",\n      "theme_color": "#ACE",\n      "icons": [{\n          "src": "' + iconsDirPath + 'icon_ss.png",\n          "sizes": "32x32",\n          "type": "image/png"\n          },{\n            "src": "' + iconsDirPath + 'icon_s.png",\n            "sizes": "48x48",\n            "type": "image/png"\n          },{\n            "src": "' + iconsDirPath + 'icon.png",\n            "sizes": "96x96",\n            "type": "image/png"\n          },{\n            "src": "' + iconsDirPath + 'icon_m.png",\n            "sizes": "152x152",\n            "type": "image/png"\n          },{\n            "src": "' + iconsDirPath + 'icon_x.png",\n            "sizes": "192x192",\n            "type": "image/png"\n          },{\n            "src": "' + iconsDirPath + 'icon_xx.png",\n            "sizes": "256x256",\n            "type": "image/png"\n          }]\n    }\n';
 
 function createImageFile(source, target) {
   // 创建manifest.json 图标
@@ -328,7 +361,7 @@ function createImageFile(source, target) {
         target: target
       };
       bufferList.push(item);
-      if (bufferList.length == config.manifest.icons.length) {
+      if (bufferList.length == iconList.length) {
         bufferList.forEach(function (data) {
           // 处理异步问题
           createFile(data.target, data.buffer);
@@ -340,13 +373,13 @@ function createImageFile(source, target) {
 var bufferList = [];
 function multipleCreateImageFile(targetPath) {
   // 批量操作图片文件
-  config.manifest.icons.forEach(function (file) {
-    // console.log(file.src)
+  iconList.forEach(function (src) {
+    // console.log(src)
     var target = null;
-    var pathSplit = file.src.split('/');
+    var pathSplit = src.split('/');
     var fileName = pathSplit[pathSplit.length - 1];
     target = targetPath + fileName;
-    var source = __dirname + file.src;
+    var source = __dirname + '/img/' + src;
     createImageFile(source, target);
   });
 }
@@ -370,16 +403,18 @@ function createManifestFile() {
   });
   var manifestPath = config.relativePath + '/' + config.relativeFilePath;
   // console.log('manifestPath==>', manifestPath)
+  Manifest.start_url = config.defaultEntry;
+  var ManifestStream = JSON.stringify(Manifest);
   fs.exists(manifestPath, function (exists) {
     if (exists) {
-      createFile(manifestPath + 'manifest.json', Manifest);
+      createFile(manifestPath + 'manifest.json', ManifestStream);
     } else {
       fs.mkdir(manifestPath, function (err) {
         if (err) {
           console.log(err);
           throw new Error(manifestPath + "创建目录失败！");
         } else {
-          createFile(manifestPath + 'manifest.json', Manifest);
+          createFile(manifestPath + 'manifest.json', ManifestStream);
         }
       });
     }
@@ -390,7 +425,8 @@ function createServiceWorkerFile(data) {
   // 创建Service Worker文件
   var serviceWorkerFileName = config.relativePath + '/' + config.relativeFilePath + config.registerFile;
   var entryScript = config.relativePath + '/' + config.relativeFilePath + config.buildDir + config.entryScript;
-  var indexFileData = '\n  if (navigator.serviceWorker) {\n    navigator.serviceWorker.register(\'' + config.redirectPath + '/' + config.registerFile + '\', {scope: "' + config.scope + '"}).then(res => {\n      // console.log(\'service worker is registered\', res)\n      let sw = null, state;\n      if (res.installing) {\n        sw = res.installing\n        state = \'installing\'\n      } else if (res.waiting) {\n        // \u66F4\u65B0\u5B8C\u6210\u7B49\u5F85\u8FD0\u884C\n        sw = res.waiting\n        state = \'waiting\'\n      } else if (res.active) {\n        // \u66F4\u65B0\u5B8C\u6210\u6FC0\u6D3B\u72B6\u6001\n        sw = res.active\n        state = \'activated\'\n      } else if (res.redundant) {\n        // \u65B0\u7684\u7F13\u5B58\u751F\u6548\u540E\u4E4B\u524D\u7684\u7F13\u5B58\u4F1A\u8FDB\u5165\u6B64\u72B6\u6001\n        sw.res.redundant\n        state = \'redundant\'\n      }\n      if (state) {\n        console.log(\'\u3010---SW---\u3011 state is \' + state)\n        if (state === \'waiting\') {\n          // \u5237\u65B0\u540E\u5224\u65AD\u662F\u5426\u4E3A\u7B49\u5F85\u72B6\u6001\n          // self.skipWaiting()\n        }\n      }\n  \n      if (sw) {\n        sw.onStateChange = () => {\n          console.log(\'sw state is \' + sw.state)\n        }\n      }\n    }).catch(err => {\n      console.error(\'something error is happened\', err)\n    })\n\n  }\n  ';
+  var indexFileData = '\n  if (navigator.serviceWorker) {\n    navigator.serviceWorker.register(\'' + config.redirectPath + '/' + config.registerFile + '\', {scope: "' + config.scope + '"}).then(res => {\n      // console.log(\'service worker is registered\', res)\n      let sw = null, state;\n      if (res.installing) {\n        sw = res.installing\n        state = \'installing\'\n      } else if (res.waiting) {\n        // \u66F4\u65B0\u5B8C\u6210\u7B49\u5F85\u8FD0\u884C\n        sw = res.waiting\n        state = \'waiting\'\n      } else if (res.active) {\n        // \u66F4\u65B0\u5B8C\u6210\u6FC0\u6D3B\u72B6\u6001\n        sw = res.active\n        state = \'activated\'\n      } else if (res.redundant) {\n        // \u65B0\u7684\u7F13\u5B58\u751F\u6548\u540E\u4E4B\u524D\u7684\u7F13\u5B58\u4F1A\u8FDB\u5165\u6B64\u72B6\u6001\n        sw.res.redundant\n        state = \'redundant\'\n      }\n      if (state) {\n        console.log(\'\u3010---SW---\u3011 state is \' + state)\n        if (state === \'waiting\') {\n          // \u5237\u65B0\u540E\u5224\u65AD\u662F\u5426\u4E3A\u7B49\u5F85\u72B6\u6001\n          // self.skipWaiting()\n        }\n      }\n  \n      if (sw) {\n        sw.onStateChange = () => {\n          console.log(\'sw state is \' + sw.state)\n        }\n      }\n    }).catch(err => {\n      console.error(\'something error is happened\', err)\n    })\n    const getURL = new XMLHttpRequest();\n    const getManifestUrl = ' + (config.manifestUrl ? config.manifestUrl : null) + '\n    const url = getManifestUrl ? getManifestUrl : location.origin + \'' + config.redirectPath + '/manifest.json\'\n    getURL.open("GET",url, true);\n    getURL.send();\n    getURL.addEventListener(\'readystatechange\', function(){\n        if(getURL.readyState==4&&getURL.status==200){\n          // const res = JSON.parse(getURL.responseText)\n          // const dataString = JSON.stringify(getURL.responseText)\n          const blob = new Blob([getURL.responseText], {type: \'application/json\'})\n          const manifestURL = URL.createObjectURL(blob)\n          document.querySelector("#insertManifest").setAttribute(\'href\', manifestURL)\n        }\n    })\n  }\n  ';
+
   var pathDir = config.relativePath + '/' + config.relativeFilePath + config.buildDir; // 目前配置是当前路径，后期需要增加自定义路径功能，预留路径判断功能
   // terser 
   var options = {
@@ -445,5 +481,5 @@ function createFile(serviceWorkerFileName, data) {
 if (!config.isEntry && config.isDefault) {
   // readFileList(__dirname, filesList)
   // 默认执行文件
-  entryFile(config.defaultEntry);
+  init(config.defaultEntry);
 }

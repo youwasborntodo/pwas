@@ -1,6 +1,6 @@
 {
   "name": "pwas",
-  "version": "1.0.5",
+  "version": "1.1.5",
   "description": "助您将现有的spa单页应用项目轻松升级成为PWA应用",
   "main": "pwa.es5.js",
   "bin": {
@@ -32,7 +32,6 @@
     "pwa.js",
     "img",
     "README.md",
-    ".babelrc",
     "pwarc.json"
   ],
   "devDependencies": {

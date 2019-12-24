@@ -4,6 +4,13 @@
   <meta http-equiv="X-UA-Compatible" content="ie=edge">
   <script src="http://apps.bdimg.com/libs/jquery/1.6.4/jquery.js"></script>
   <title>Test_Pwa_Service_Worker</title>
+    <link rel="apple-touch-icon" sizes="180x180" href="static/pwa/icons/apple-icon.png"/>
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="white">
+    <meta name="apple-mobile-web-app-title" content="测试2">
+    <meta name="application-name" content="测试2">
+    <link rel="icon" type="image/png" href="static/pwa/icons/icon_ss.png" sizes="32x32"/>
+    
   <style>
     *{
       margin: 0;
@@ -17,7 +24,7 @@
       width: 100%;
     }
   </style>
-      <link rel="manifest" href="pwa/manifest.json">
+  <link rel="manifest" id="insertManifest" href="manifest.json?t=1577179071102">
       </head>
 <body>
   <h5>API调试功能:17</h5>
@@ -28,4 +35,5 @@
     <li><span>emoji gif 3</span><img src="/img/emoji3.gif" alt=""></li>
     <li><span>emoji gif 4</span><img src="/img/emoji4.gif" alt=""></li>
   </ul>
-<script src="pwa/entry_sw.js"></script></body></html>
+<script src="static/pwa/entry_sw.js"></script>
+      </body></html>

@@ -117,62 +117,78 @@ const config = {
   entryScript: 'entry_sw.js',
   defaultEntry: 'index.html', // 如果不指定入口文件，默认在执行目录下查找index.html
   iconsPath: 'icons/',
+  manifestUrl: '',
   relativeFilePath: '',
+  isWindows: process.env.os && process.env.os == 'Windows_NT',
   isBuild: false,
+  isConfig: false, // 判断是否读取配置文件
   isEntry: false, // 判断是否指定入口文件
   isDefault: true, // 是否执行默认操作      
   relativePath: process.cwd() ? process.cwd() : process.env.pwd,
-  name: 'PWAs应用',
   manifest: {
+    name: 'PWAs应用',
     icons: [{
-      "src": "/img/icon_ss.png",
+      "src": "icon_ss.png",
       "sizes": "32x32",
       "type": "image/png"
     },{
-      "src": "/img/icon_s.png",
+      "src": "icon_s.png",
       "sizes": "48x48",
       "type": "image/png"
     },{
-      "src": "/img/icon.png",
+      "src": "icon.png",
       "sizes": "96x96",
       "type": "image/png"
     },{
-      "src": "/img/icon_m.png",
+      "src": "icon_m.png",
       "sizes": "152x152",
       "type": "image/png"
     },{
-      "src": "/img/apple-icon.png",
+      "src": "apple-icon.png",
       "sizes": "180x180",
       "type": "image/png"
     },{
-      "src": "/img/icon_x.png",
+      "src": "icon_x.png",
       "sizes": "192x192",
       "type": "image/png"
     },{
-      "src": "/img/icon_xx.png",
+      "src": "icon_xx.png",
       "sizes": "256x256",
       "type": "image/png"
     }]
   }
 }
-const pwarcPath = config.relativePath + '\\.pwarc'
-// console.log('pwarcPath======', pwarcPath)
-fs.readFile(pwarcPath, 'utf-8', (err, data) => {
-  // 读取默认配置
-  if (!err) {
-    console.log('读取配置文件.....')
-    const pwarc = JSON.parse(data)
-    config.buildDir = pwarc.buildDir
-    config.scope = pwarc.scope
-    config.redirectPath = pwarc.redirectPath
-    config.registerFile = pwarc.registerFile
-    config.entryScript = pwarc.entryScript
-    config.iconsPath = pwarc.iconsPath
-    config.manifest = pwarc.manifest
-  } else {
-    console.log('使用默认配置......')
-  }
-})
+const iconsTargetPath = `${config.buildDir}${config.iconsPath}`
+let Manifest = {}
+const iconList = []
+const pwarcPath = config.isWindows ? config.relativePath + "\\.pwarc" : config.relativePath + "/.pwarc"
+// console.log('pwarcPath======>', pwarcPath)
+function init(file) {
+  fs.readFile(pwarcPath, 'utf-8', (err, data) => {
+    // 读取默认配置
+    if (!err) {
+      console.log('读取配置文件.....')
+      config.isConfig = true
+      const pwarc = JSON.parse(data)
+      config.buildDir = pwarc.buildDir
+      config.scope = pwarc.scope
+      config.redirectPath = pwarc.redirectPath
+      config.registerFile = pwarc.registerFile
+      config.entryScript = pwarc.entryScript
+      // config.iconsPath = pwarc.iconsPath
+      config.manifest = pwarc.manifest
+      Manifest = pwarc.manifest
+      Manifest.icons.forEach(img => {
+        iconList.push(img.src)
+        img.src = iconsTargetPath + img.src
+      })
+    } else {
+      console.log('使用默认配置......')
+    }
+    entryFile(file)
+  })
+}
+
 const exceptFile= [
   'node_modules',
   'package.json',
@@ -188,11 +204,10 @@ program.command('version')
   })
 
 program.command('init')
-  .description('生成.pwarc配置文件')
+  .description('生成config.pwarc配置文件')
   .action(function(){
     config.isDefault = false
     const dir = __dirname + '/pwarc.json'
-    console.log('PWArc--------', dir)
     fs.readFile(dir, 'utf-8', (err, data) => {
       if(err) {
         console.log(err)
@@ -208,7 +223,7 @@ program.command('entry <file>')
     // 判断有没有带入文件名，后期加入文件夹前缀功能
     config.isEntry = true
     config.isDefault = true
-    entryFile(file)
+    init(file)
   }).on('--help', function () {
     console.log('');
     console.log('Entry file【入口文件配置】:');
@@ -224,7 +239,7 @@ program.command('build <file>')
     config.isEntry = true
     config.isBuild = true
     config.isDefault = true
-    entryFile(file)
+    init(file)
   }).on('--help', function () {
     console.log('');
     console.log('Entry file【入口文件配置】:');
@@ -241,6 +256,8 @@ program.command('--help')
       console.log('');
       console.log('pwas entry index.html [Default:默认为空自动寻找 index.html]');
       console.log('');
+      console.log('pwas init 【生成配置文件.pwarc，项目的package.json目录执行】');
+      console.log('')
     })
 // 必须在.parse()之前，因为node的emit()是即时的
 program.parse(process.argv);
@@ -298,7 +315,23 @@ function entryFile(file) {
     // filePath = config.relativePath
     console.log('building.........')
   }
-  filePath = process.env.os && process.env.os == 'Windows_NT' ? config.relativePath + "\\" + file : config.relativePath + "/" + file
+  if (!config.isConfig) {
+    const dir = __dirname + '/pwarc.json'
+    fs.readFile(dir, 'utf-8', (err, data) => {
+      if (err) {
+        console.log(err)
+        Manifest = config.manifest
+      }
+      const manifestConfig = JSON.parse(data)
+      Manifest = manifestConfig.manifest
+      Manifest.icons.forEach(img => {
+        iconList.push(img.src)
+        img.src = iconsTargetPath + img.src
+      })
+    })
+
+  }
+  filePath = config.isWindows ? config.relativePath + "\\" + file : config.relativePath + "/" + file
   let htmlText = null
   // console.log('filePath======>', filePath)
   fs.readFile(filePath, 'utf-8', (err, data) => {
@@ -326,20 +359,23 @@ function entryFile(file) {
     } else {
       newHTML = htmlText
     }
-    const manifest = `<link rel="manifest" href="manifest.json">`
-    if (!newHTML.includes(manifest)) {
+    const buildTime = new Date().getTime()
+    const manifest = `<link rel="manifest" id="insertManifest" href="manifest.json?t=${buildTime}">`
+    if (!newHTML.includes(`<link rel="manifest" id="insertManifest"`)) {
       // 判断是否己经存在Manifest.json文件
       const replaceText = `${manifest}
       </head>`;
       newHTML = newHTML.replace(`</head>`, replaceText);
+    } else {
+      newHTML = newHTML.replace(/manifest.json\?t=\d+/mg, `manifest.json?t=${buildTime}`);
     }
     const icon = `
-    <link rel="apple-touch-icon" sizes="180x180" href="${config.buildDir}icons/apple-icon.png"/>
+    <link rel="apple-touch-icon" sizes="180x180" href="${config.buildDir}${config.iconsPath}apple-icon.png"/>
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="white">
-    <meta name="apple-mobile-web-app-title" content="${config.name}">
-    <meta name="application-name" content="${config.name}">
-    <link rel="icon" type="image/png" href="${config.buildDir}icons/icon_ss.png" sizes="32x32"/>
+    <meta name="apple-mobile-web-app-title" content="${Manifest.name}">
+    <meta name="application-name" content="${Manifest.name}">
+    <link rel="icon" type="image/png" href="${config.buildDir}${config.iconsPath}icon_ss.png" sizes="32x32"/>
     `
     if (!newHTML.includes(icon)) {
       // 判断是否己经存在Manifest.json文件
@@ -447,44 +483,6 @@ function getAttrList(node) {
       // console.log(node.nodeName)
   }
 }
-const iconsDirPath = `${config.buildDir}${config.iconsPath}`
-const Manifest = `
-    {
-      "name": "PWAs",
-      "short_name": "PWAs",
-      "description": "这只是一个测试应用！",
-      "start_url": "${config.defaultEntry}",
-      "display": "standalone",
-      "orientation": "any",
-      "background_color": "#ACE",
-      "theme_color": "#ACE",
-      "icons": [{
-          "src": "${iconsDirPath}icon_ss.png",
-          "sizes": "32x32",
-          "type": "image/png"
-          },{
-            "src": "${iconsDirPath}icon_s.png",
-            "sizes": "48x48",
-            "type": "image/png"
-          },{
-            "src": "${iconsDirPath}icon.png",
-            "sizes": "96x96",
-            "type": "image/png"
-          },{
-            "src": "${iconsDirPath}icon_m.png",
-            "sizes": "152x152",
-            "type": "image/png"
-          },{
-            "src": "${iconsDirPath}icon_x.png",
-            "sizes": "192x192",
-            "type": "image/png"
-          },{
-            "src": "${iconsDirPath}icon_xx.png",
-            "sizes": "256x256",
-            "type": "image/png"
-          }]
-    }
-`
 
 function createImageFile(source, target) {
   // 创建manifest.json 图标
@@ -499,7 +497,7 @@ function createImageFile(source, target) {
         target
       }
       bufferList.push(item)
-      if (bufferList.length == config.manifest.icons.length) {
+      if (bufferList.length == iconList.length) {
           bufferList.forEach(data => {
             // 处理异步问题
             createFile(data.target, data.buffer)
@@ -511,13 +509,13 @@ function createImageFile(source, target) {
 const bufferList = []
 function multipleCreateImageFile(targetPath) {
   // 批量操作图片文件
-  config.manifest.icons.forEach(file => {
-    // console.log(file.src)
+  iconList.forEach(src => {
+    // console.log(src)
     let target = null
-    const pathSplit = file.src.split('/')
+    const pathSplit = src.split('/')
     const fileName = pathSplit[pathSplit.length - 1]
     target = targetPath + fileName
-    const source = __dirname + file.src
+    const source = __dirname + '/img/' + src
     createImageFile(source, target)
   })
 }
@@ -541,16 +539,18 @@ function createManifestFile() {
     })
     const manifestPath = config.relativePath + '/' + config.relativeFilePath
     // console.log('manifestPath==>', manifestPath)
+    Manifest.start_url = config.defaultEntry
+    const ManifestStream = JSON.stringify(Manifest)
     fs.exists(manifestPath, exists => {
       if (exists) {
-        createFile(manifestPath + 'manifest.json', Manifest)
+        createFile(manifestPath + 'manifest.json', ManifestStream)
       } else {
         fs.mkdir(manifestPath, err => {
           if (err) {
             console.log(err)
             throw new Error(manifestPath + "创建目录失败！")
           } else {
-            createFile(manifestPath + 'manifest.json', Manifest)
+            createFile(manifestPath + 'manifest.json', ManifestStream)
           }
         })
       }
@@ -598,9 +598,23 @@ function createServiceWorkerFile(data) {
     }).catch(err => {
       console.error('something error is happened', err)
     })
-
+    const getURL = new XMLHttpRequest();
+    const getManifestUrl = ${config.manifestUrl ? config.manifestUrl : null}
+    const url = getManifestUrl ? getManifestUrl : location.origin + '${config.redirectPath}/manifest.json'
+    getURL.open("GET",url, true);
+    getURL.send();
+    getURL.addEventListener('readystatechange', function(){
+        if(getURL.readyState==4&&getURL.status==200){
+          // const res = JSON.parse(getURL.responseText)
+          // const dataString = JSON.stringify(getURL.responseText)
+          const blob = new Blob([getURL.responseText], {type: 'application/json'})
+          const manifestURL = URL.createObjectURL(blob)
+          document.querySelector("#insertManifest").setAttribute('href', manifestURL)
+        }
+    })
   }
   `
+
   const pathDir = config.relativePath + '/' + config.relativeFilePath + config.buildDir // 目前配置是当前路径，后期需要增加自定义路径功能，预留路径判断功能
   // terser 
   const options = {
@@ -655,5 +669,5 @@ function createFile (serviceWorkerFileName, data) {
 if (!config.isEntry && config.isDefault) {
   // readFileList(__dirname, filesList)
   // 默认执行文件
-  entryFile(config.defaultEntry)
+  init(config.defaultEntry)
 }

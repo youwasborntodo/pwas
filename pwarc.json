@@ -5,7 +5,10 @@
   "redirectPath": "",
   "registerFile": "sw.js",
   "entryScript": "entry_sw.js",
-  "manifestUrl": "",
+  "cacheName": "index",
+  "iconUrl": "",
+  "createIcon": false,
+  "exclude": [],
   "manifest": {
     "name": "PWAs应用",
     "short_name": "PWAs",

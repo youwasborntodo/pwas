@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 //pwa
-const fs = require('fs');
+const fs = require('fs')
+const request = require('request')
+const images = require('images')
 const path = require('path')
 const PKG = require('./package.json')
-const program = require("commander");
+const program = require("commander")
 const terser = require('terser')
-const jsDom = require("jsdom");
+const jsDom = require("jsdom")
 const SW_MODEL_EXPORT = `self.addEventListener('install', e => {
         console.log('installing.........')
         e.waitUntil(
@@ -38,7 +40,19 @@ const SW_MODEL_EXPORT = `self.addEventListener('install', e => {
             // console.log(list)
             return Promise.all(
                 list.filter(cacheName => {
+                  if (cacheName.includes('@')){
+                    // console.log('cacheName--->', cacheName.split('@'))
+                    // console.log('edition--->', edition.split('@'))
+                    const cacheTime = cacheName.split('@')[1]
+                    const cacheLabel = cacheName.split('@')[0]
+                    const editionLabel = edition.split('@')[0]
+                    const editionTime = edition.split('@')[1]
+                    if (cacheLabel == editionLabel) {
+                        return cacheTime != editionTime
+                    }
+                } else {
                     return cacheName != edition
+                }
                 }).map(cacheName => {
                     return caches.delete(cacheName)
                 })
@@ -58,7 +72,7 @@ const SW_MODEL_EXPORT = `self.addEventListener('install', e => {
 
     self.addEventListener('unhandledrejection', event => {
         // 跨域加载资源出错时
-        console.error('unhandledrejection==>', event)
+        console.error(' 跨域加载资源缓存失败，暂不支持跨域资源==>', event)
     })
 
     self.addEventListener('activate', e => {
@@ -92,15 +106,14 @@ const SW_MODEL_EXPORT = `self.addEventListener('install', e => {
                     // 复制请求
                     const responseToCache = response.clone()
                     const getFile = fetchRequest.url.replace(fetchRequest.referrer, '/')
-                    // if (fileList.includes(getFile)) {
-                    // 判断当前请求的文件是否在允许缓存的文件配置列表中
-                    caches.open(edition).then(cache => {
-
-
-                        cache.put(e.request, responseToCache)
-
-                    })
-                    // }
+                    const getFileSplit = getFile.split('/')
+                    const getFileName = getFileSplit[getFileSplit.length-1].split('?')[0]
+                    if (!exclude.includes(getFileName)) {
+                      // 判断当前请求的文件是否在允许缓存的文件配置列表中
+                      caches.open(edition).then(cache => {
+                          cache.put(e.request, responseToCache)
+                      })
+                    }
                     return response
                 })
             })
@@ -120,7 +133,11 @@ const config = {
   manifestUrl: '',
   relativeFilePath: '',
   isWindows: process.env.os && process.env.os == 'Windows_NT',
+  cacheName: "index",
+  exclude: [],
+  iconUrl: '',
   isBuild: false,
+  createIcon: false,
   isConfig: false, // 判断是否读取配置文件
   isEntry: false, // 判断是否指定入口文件
   isDefault: true, // 是否执行默认操作      
@@ -172,7 +189,11 @@ function init(file) {
       const pwarc = JSON.parse(data)
       config.buildDir = pwarc.buildDir
       config.scope = pwarc.scope
+      config.cacheName = pwarc.cacheName
+      config.exclude = pwarc.exclude
+      config.iconUrl = pwarc.iconUrl
       config.redirectPath = pwarc.redirectPath
+      config.createIcon = pwarc.createIcon
       config.registerFile = pwarc.registerFile
       config.entryScript = pwarc.entryScript
       // config.iconsPath = pwarc.iconsPath
@@ -369,18 +390,21 @@ function entryFile(file) {
     } else {
       newHTML = newHTML.replace(/manifest.json\?t=\d+/mg, `manifest.json?t=${buildTime}`);
     }
-    const icon = `
-    <link rel="apple-touch-icon" sizes="180x180" href="${config.buildDir}${config.iconsPath}apple-icon.png"/>
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="white">
-    <meta name="apple-mobile-web-app-title" content="${Manifest.name}">
-    <meta name="application-name" content="${Manifest.name}">
-    <link rel="icon" type="image/png" href="${config.buildDir}${config.iconsPath}icon_ss.png" sizes="32x32"/>
-    `
-    if (!newHTML.includes(icon)) {
-      // 判断是否己经存在Manifest.json文件
-      const replaceText = `</title>${icon}`;
-      newHTML = newHTML.replace(`</title>`, replaceText);
+    if (config.createIcon) {
+      // 判断是否开启PWA安装图标配置
+        const icon = `
+        <link rel="apple-touch-icon" sizes="180x180" href="${config.buildDir}${config.iconsPath}apple-icon.png"/>
+        <meta name="mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="white">
+        <meta name="apple-mobile-web-app-title" content="${Manifest.name}">
+        <meta name="application-name" content="${Manifest.name}">
+        <link rel="icon" type="image/png" href="${config.buildDir}${config.iconsPath}icon_ss.png" sizes="32x32"/>
+        `
+        if (!newHTML.includes(icon)) {
+          // 判断是否己经存在Manifest.json文件
+          const replaceText = `</title>${icon}`;
+          newHTML = newHTML.replace(`</title>`, replaceText);
+        }
     }
     createFile(file, newHTML);
     const htmlDom = new JSDOM(htmlText);
@@ -431,19 +455,31 @@ function copyServiceWorkerFile(list) {
   // console.log('edition', buildTime)
   let SW_DATA = `
     // serviceWorker.js
-    const edition = 'pwas:${buildTime}'
+    const edition = 'pwas[${config.cacheName}]@${buildTime}'
     const fileList = [
   `
-    list.forEach(str => {
-        SW_DATA += `'${str}',
+    list.forEach(file => {
+        SW_DATA += `'${file}',
       `
     })
-    SW_DATA += `
-        ]  
-    `
+    SW_DATA += `]`
+    if (config.exclude.length > 0) {
+      SW_DATA += `
+      // 排除不需要缓存的文件
+      const exclude = [`
+      config.exclude.forEach(file => {
+        SW_DATA += `'${file}',
+        `
+      })
+      SW_DATA += `]`
+    } else {
+      SW_DATA+= `
+      const exclude = []
+      `
+    }
+ 
   SW_DATA = SW_DATA + SW_MODEL_EXPORT
-      createServiceWorkerFile(SW_DATA)
-    // })
+  createServiceWorkerFile(SW_DATA)
 }
 
 function getChildNodes(node) {
@@ -506,18 +542,65 @@ function createImageFile(source, target) {
     }
   })
 }
+
+function resetImage(pathTarget) {
+  const pathName = pathTarget + 'icon.png'
+  const writeStream = fs.createWriteStream(pathName)
+  const readStream = request(config.iconUrl)
+  const sizeList = [
+    {
+      name : 'icon_ss.png',
+      size : 32
+    },
+    {
+      name : 'icon_s.png',
+      size : 64
+    },
+    {
+      name : 'icon.png',
+      size : 96
+    },
+    {
+      name : 'icon_m.png',
+      size : 152
+    },
+    {
+      name : 'icon_x.png',
+      size : 192
+    },
+    {
+      name : 'icon_xx.png',
+      size : 256
+    }]
+  readStream.pipe(writeStream)
+  writeStream.on('finish', () => {
+    images(pathTarget + 'icon.png').size(180).fill(255,255,255).draw(images(pathTarget + 'icon.png').size(160), 10, 10).save(pathTarget + 'apple-icon.png', {quality: 100})
+    sizeList.map(data => {
+      images(pathTarget + 'icon.png').size(data.size).save(pathTarget + data.name, {quality: 100})
+    })
+    console.log('Icon创建成功！')
+  })
+  writeStream.on('error', () => {
+    console.log('Icon获取失败，请检查配置链接是否正确！')
+  })
+}
+
 const bufferList = []
 function multipleCreateImageFile(targetPath) {
   // 批量操作图片文件
-  iconList.forEach(src => {
-    // console.log(src)
-    let target = null
-    const pathSplit = src.split('/')
-    const fileName = pathSplit[pathSplit.length - 1]
-    target = targetPath + fileName
-    const source = __dirname + '/img/' + src
-    createImageFile(source, target)
-  })
+  if(config.iconUrl) {
+    resetImage(targetPath)
+  } else {
+    iconList.forEach(src => {
+      // console.log(src)
+      let target = null
+      const pathSplit = src.split('/')
+      const fileName = pathSplit[pathSplit.length - 1]
+      target = targetPath + fileName
+      const source = __dirname + '/img/' + src
+      createImageFile(source, target)
+    })
+  }
 }
 function createManifestFile() {
   // 创建manifest.json文件
@@ -612,6 +695,33 @@ function createServiceWorkerFile(data) {
           document.querySelector("#insertManifest").setAttribute('href', manifestURL)
         }
     })
+    window.uninstallServiceWorker = function (cacheName) {
+      // 如果没有指定需要删除的cacheName，默认全部删除
+        navigator.serviceWorker.getRegistration().then(registrations => {
+        console.log('registrations', registrations)
+        registrations.unregister()
+      })
+      deleteCache(cacheName)
+    }
+    function deleteCache(deleteName) {
+      // 删除所有缓存
+      caches.keys().then(list => {
+          return Promise.all(
+              list.map(cacheName => {
+                if (deleteName) {
+                  const execName = /^pwas\[(\S+)\].+/.exec(cacheName)[1]
+                  if (execName == deleteName) {
+                    return caches.delete(cacheName)
+                  } 
+                } else {
+                  return caches.delete(cacheName)
+                }    
+              })
+          )
+      }).catch(err => {
+          console.error(err)
+      })
+    }
   }
   `
 

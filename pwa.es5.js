@@ -4,7 +4,7 @@
 //pwa
 var fs = require('fs');
 var request = require('request');
-var images = require('images');
+var jimp = require('jimp');
 var path = require('path');
 var PKG = require('./package.json');
 var program = require("commander");
@@ -393,7 +393,8 @@ function createImageFile(source, target) {
 }
 
 function resetImage(pathTarget) {
-  var pathName = pathTarget + 'icon.png';
+  // 获取网络配置ICON
+  var pathName = pathTarget + 'iconSource.png';
   var writeStream = fs.createWriteStream(pathName);
   var readStream = request(config.iconUrl);
   var sizeList = [{
@@ -409,6 +410,9 @@ function resetImage(pathTarget) {
     name: 'icon_m.png',
     size: 152
   }, {
+    name: 'apple-icon.png',
+    size: 180
+  }, {
     name: 'icon_x.png',
     size: 192
   }, {
@@ -417,9 +421,14 @@ function resetImage(pathTarget) {
   }];
   readStream.pipe(writeStream);
   writeStream.on('finish', function () {
-    images(pathTarget + 'icon.png').size(180).fill(255, 255, 255).draw(images(pathTarget + 'icon.png').size(160), 10, 10).save(pathTarget + 'apple-icon.png', { quality: 100 });
-    sizeList.map(function (data) {
-      images(pathTarget + 'icon.png').size(data.size).save(pathTarget + data.name, { quality: 100 });
+    sizeList.reverse();
+    jimp.read(pathTarget + 'iconSource.png', function (err, imgSource) {
+      if (err) throw err;
+      sizeList.map(function (data) {
+        imgSource.resize(data.size, data.size).quality(100).write(pathTarget + data.name);
+      });
+    }).catch(function (err) {
+      console.error(err);
     });
     console.log('Icon创建成功！');
   });
@@ -465,7 +474,7 @@ function createManifestFile() {
   });
   var manifestPath = config.relativePath + '/' + config.relativeFilePath;
   // console.log('manifestPath==>', manifestPath)
-  Manifest.start_url = config.defaultEntry;
+  // Manifest.start_url = config.defaultEntry
   var ManifestStream = JSON.stringify(Manifest);
   fs.exists(manifestPath, function (exists) {
     if (exists) {

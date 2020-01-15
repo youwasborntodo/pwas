@@ -1,6 +1,6 @@
 {
   "name": "pwas",
-  "version": "1.2.0",
+  "version": "1.2.2",
   "description": "助您将现有的spa单页应用项目轻松升级成为PWA应用",
   "main": "pwa.es5.js",
   "bin": {
@@ -10,10 +10,10 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "babel pwa.js -o pwa.es5.js"
   },
-  "author": "brian",
+  "author": "brian <505072907@qq.com>",
   "license": "MIT",
   "dependencies": {
-    "images": "^3.0.2",
+    "jimp": "^0.9.3",
     "commander": "^4.0.1",
     "jsdom": "^15.2.1",
     "terser": "^4.4.2"
@@ -38,5 +38,12 @@
   "devDependencies": {
     "babel": "^6.23.0",
     "babel-preset-es2015": "^6.24.1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/youwasborntodo/pwas.git"
+  },
+  "bugs": {
+    "url": "https://github.com/youwasborntodo/pwas/issues"
   }
 }

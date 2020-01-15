@@ -2,7 +2,7 @@
 //pwa
 const fs = require('fs')
 const request = require('request')
-const images = require('images')
+const jimp = require('jimp')
 const path = require('path')
 const PKG = require('./package.json')
 const program = require("commander")
@@ -544,7 +544,8 @@ function createImageFile(source, target) {
 }
 
 function resetImage(pathTarget) {
-  const pathName = pathTarget + 'icon.png'
+  // 获取网络配置ICON
+  const pathName = pathTarget + 'iconSource.png'
   const writeStream = fs.createWriteStream(pathName)
   const readStream = request(config.iconUrl)
   const sizeList = [
@@ -565,6 +566,10 @@ function resetImage(pathTarget) {
       size : 152
     },
     {
+      name : 'apple-icon.png',
+      size : 180
+    },
+    {
       name : 'icon_x.png',
       size : 192
     },
@@ -574,10 +579,15 @@ function resetImage(pathTarget) {
     }]
   readStream.pipe(writeStream)
   writeStream.on('finish', () => {
-    images(pathTarget + 'icon.png').size(180).fill(255,255,255).draw(images(pathTarget + 'icon.png').size(160), 10, 10).save(pathTarget + 'apple-icon.png', {quality: 100})
-    sizeList.map(data => {
-      images(pathTarget + 'icon.png').size(data.size).save(pathTarget + data.name, {quality: 100})
-    })
+    sizeList.reverse()
+      jimp.read(pathTarget + 'iconSource.png', (err, imgSource) => {
+        if (err) throw err
+        sizeList.map(data => {
+          imgSource.resize(data.size, data.size).quality(100).write(pathTarget + data.name)
+        })
+      }).catch(err => {
+        console.error(err)
+      })
     console.log('Icon创建成功！')
   })
   writeStream.on('error', () => {
@@ -622,7 +632,7 @@ function createManifestFile() {
     })
     const manifestPath = config.relativePath + '/' + config.relativeFilePath
     // console.log('manifestPath==>', manifestPath)
-    Manifest.start_url = config.defaultEntry
+    // Manifest.start_url = config.defaultEntry
     const ManifestStream = JSON.stringify(Manifest)
     fs.exists(manifestPath, exists => {
       if (exists) {

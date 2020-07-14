@@ -108,7 +108,7 @@ const SW_MODEL_EXPORT = `self.addEventListener('install', e => {
                     const getFile = fetchRequest.url.replace(fetchRequest.referrer, '/')
                     const getFileSplit = getFile.split('/')
                     const getFileName = getFileSplit[getFileSplit.length-1].split('?')[0]
-                    if (!exclude.includes(getFileName)) {
+                    if (!exclude.includes(getFileName) || !apiExclude.includes(responseToCache.url)) {
                       // 判断当前请求的文件是否在允许缓存的文件配置列表中
                       caches.open(edition).then(cache => {
                           cache.put(e.request, responseToCache)
@@ -135,6 +135,7 @@ const config = {
   isWindows: process.env.os && process.env.os == 'Windows_NT',
   cacheName: "index",
   exclude: [],
+  apiExclude: [],
   iconUrl: '',
   isBuild: false,
   createIcon: false,
@@ -191,6 +192,7 @@ function init(file) {
       config.scope = pwarc.scope
       config.cacheName = pwarc.cacheName
       config.exclude = pwarc.exclude
+      config.apiExclude = pwarc.apiExclude
       config.iconUrl = pwarc.iconUrl
       config.redirectPath = pwarc.redirectPath
       config.createIcon = pwarc.createIcon
@@ -475,6 +477,20 @@ function copyServiceWorkerFile(list) {
     } else {
       SW_DATA+= `
       const exclude = []
+      `
+    }
+    if (config.apiExclude.length > 0) {
+      SW_DATA += `
+      // 排除不需要缓存的文件
+      const apiExclude = [`
+      config.apiExclude.forEach(file => {
+        SW_DATA += `'${file}',
+        `
+      })
+      SW_DATA += `]`
+    } else {
+      SW_DATA+= `
+      const apiExclude = []
       `
     }
  

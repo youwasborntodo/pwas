@@ -9,6 +9,7 @@
   "iconUrl": "",
   "createIcon": false,
   "exclude": [],
+  "apiExclude": [],
   "manifest": {
     "name": "PWAs应用",
     "short_name": "PWAs",

@@ -45,7 +45,7 @@ npm install pwas@latest -D
     "babel-polyfill": "^6.26.0",
   },
   "devDpendencies": {
-    "pwas": "^1.1.3",
+    "pwas": "^1.2.3",
   }
 // ....   
 【"build": "node build/build.js && pwas build dist/index.html"】
@@ -61,6 +61,23 @@ npm install pwas@latest -D
 ```
 3.此时在项目根目录中会生成一个.pwarc文件，可以在此文件中配置manifest.json文件或者注册文件名字的反向代理路径等
 4.修改icons图标请在默认生成的icons图片目录替换，后期加入自定义Icons路径功能
+
+# 配置参数说明
+
+``` bash
+  "buildDir": "static/pwa/", // 构建之后生成的目录文件夹地址，PWA应用Manifest引用的默认图标和入口文件存放位置
+  "scope": "./", // 缓存的作用域范围
+  "redirectPath": "", // 如果项目在生产环境访问的地址使用了nginx反向代理，则需要使用此配置项，生成的结果参考entryScript配置项名称【默认entry_sw.js】
+  "registerFile": "sw.js", // 注册文件名称，可以自行修改，建议使用默认名称
+  "entryScript": "entry_sw.js", // 入口文件名称，可以自行修改，建议使用默认名称
+  "cacheName": "index", // PWA的缓存名称，生成效果参考开发工具，比如Chrome -> F12 -> Application -> Cache Storage
+  "iconUrl": "", // 手动配置PWA的ICON图标，打包时引用的第三方链接图片地址，打包时会下载替换默认的ICON图标
+  "createIcon": false, // 是否创建图标
+  "exclude": [], // 需要过滤排除的文件类型或者文件名，使用参考：['.png', 'test.jpg', 'filter.mp4']
+  "apiExclude": [], // 需要过滤排队的API接口地址，可以模糊输入API接口中带有的路由或者path名称，使用参考：['/api/test', '/api/device/list']
+  "manifest": // 参考PWA官方manifest配置说明 https://developer.mozilla.org/en-US/docs/Web/Manifest
+```
+
 
 # 常见问题说明
 1.项目必须使用https协议

@@ -13,10 +13,10 @@
   "author": "brian <505072907@qq.com>",
   "license": "MIT",
   "dependencies": {
-    "jimp": "^0.9.3",
-    "commander": "^4.0.1",
-    "jsdom": "^15.2.1",
-    "terser": "^4.4.2"
+    "commander": "9.3.0",
+    "jimp": "0.16.1",
+    "jsdom": "19.0.0",
+    "terser": "5.14.1"
   },
   "keywords": [
     "ServiceWorker",

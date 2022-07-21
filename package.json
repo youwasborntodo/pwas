@@ -16,7 +16,7 @@
     "commander": "9.3.0",
     "jimp": "0.16.1",
     "jsdom": "19.0.0",
-    "terser": "5.14.1"
+    "terser": "5.14.2"
   },
   "keywords": [
     "ServiceWorker",

@@ -1708,11 +1708,11 @@ parse-bmfont-binary@^1.0.5:
   resolved "https://registry.npmjs.org/parse-bmfont-binary/-/parse-bmfont-binary-1.0.6.tgz"
 
 parse-bmfont-xml@^1.1.4:
-  version "1.1.4"
-  resolved "https://registry.npmjs.org/parse-bmfont-xml/-/parse-bmfont-xml-1.1.4.tgz"
+  version "1.1.6"
+  resolved "https://registry.yarnpkg.com/parse-bmfont-xml/-/parse-bmfont-xml-1.1.6.tgz#016b655da7aebe6da38c906aca16bf0415773767"
   dependencies:
     xml-parse-from-string "^1.0.0"
-    xml2js "^0.4.5"
+    xml2js "^0.5.0"
 
 parse-headers@^2.0.0:
   version "2.0.5"
@@ -2058,9 +2058,9 @@ xml-parse-from-string@^1.0.0:
   version "1.0.1"
   resolved "https://registry.npmjs.org/xml-parse-from-string/-/xml-parse-from-string-1.0.1.tgz"
 
-xml2js@^0.4.5:
-  version "0.4.23"
-  resolved "https://registry.npmjs.org/xml2js/-/xml2js-0.4.23.tgz"
+xml2js@^0.5.0:
+  version "0.5.0"
+  resolved "https://registry.yarnpkg.com/xml2js/-/xml2js-0.5.0.tgz#d9440631fbb2ed800203fad106f2724f62c493b7"
   dependencies:
     sax ">=0.6.0"
     xmlbuilder "~11.0.0"

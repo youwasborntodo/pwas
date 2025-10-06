@@ -1,37 +1,62 @@
-# PWAs
-Quickly upgrade your project to PWAs
-助你快速将现有项目升级成为PWA
-创建初衷：
-PWAs是一种非常不错的谷歌小程序技术，目前而言虽然还不能像原生APP一样性能和体验，不过pwa这个技术的基础特性还是非常值得尝试的，特别是针对那些需要在弱网环境下使用的项目，只需要第一次加载完成之后，后期二次加载直接从用户本地读取缓存的ServiceWorker，抛开API接口数据响应的前提，资源文件加载速度几乎可以秒开，很多SPA单页应用项目，【不管你是用angular.js、 vue.js、 react.js，只要你是用的nodejs在前端构建的代码，理论上都是可以使用此工具快速生成PWA】编译之后都会面临几个比较大的JS公共文件，每次加载会造成极大的浪费，所以使用PWA的第一步就是可以利用它的缓存机制对项目在弱网环境下进行资源加速；
-本项目[源码地址](https://github.com/youwasborntodo/pwas)
-# 升级问题
-项目第一次在浏览器中安装成功serviceworker之后，后期升级均是无感知加载
+# PWAs  
+Quickly upgrade your project to PWAs  
+助你快速将现有项目升级成为 PWA  
+(Create PWAs quickly for your existing projects)
 
-# 使用方式一 【usage method 1】
-全局安装安装使用
+---
 
-``` bash
+## 创建初衷 / Purpose of Creation  
+PWAs 是一种非常不错的谷歌小程序技术，目前而言虽然还不能像原生 APP 一样性能和体验，不过 PWA 这个技术的基础特性还是非常值得尝试的，特别是针对那些需要在弱网环境下使用的项目，只需要第一次加载完成之后，后期二次加载直接从用户本地读取缓存的 ServiceWorker，抛开 API 接口数据响应的前提，资源文件加载速度几乎可以秒开。  
+PWAs are a powerful Google web app technology. Although not yet equal to native apps in performance or UX, they’re worth exploring — especially for projects that must work under poor network conditions. Once initially loaded, later loads read directly from the local Service Worker cache, providing almost instant loading even without network response.
+
+很多 SPA 单页应用项目【不管你是用 angular.js、vue.js、react.js，只要你是用的 nodejs 在前端构建的代码，理论上都是可以使用此工具快速生成 PWA】编译之后都会面临几个比较大的 JS 公共文件，每次加载会造成极大的浪费。  
+Many SPA (Single Page Application) projects — whether built with Angular.js, Vue.js, or React.js — face large shared JS bundles after compilation, which wastes bandwidth on every load.  
+
+所以使用 PWA 的第一步就是可以利用它的缓存机制对项目在弱网环境下进行资源加速。  
+Using PWA’s caching mechanism is the first step to accelerating resource loading in weak network conditions.
+
+本项目 [源码地址](https://github.com/youwasborntodo/pwas)  
+(Project source code: [GitHub Repository](https://github.com/youwasborntodo/pwas))
+
+---
+
+## 升级问题 / Upgrade Behavior  
+项目第一次在浏览器中安装成功 service worker 之后，后期升级均是无感知加载。  
+Once the Service Worker is installed successfully in the browser, all subsequent upgrades are silently applied without user awareness.
+
+---
+
+## 使用方式一 【Usage Method 1】  
+全局安装并使用  
+(Global installation and usage)
+
+```bash
 npm install pwas@latest -g
-// 1.进入你的项目己经构建的目录，例如你的项目名叫example;【open your Project folder】
-// 【For example】 C:\Users\Administrator\Desktop\example\
-// 2.在example目录下找到你己经构建好的目录地址，例如己经构建好的项目文件均放在【dist】目录下
+// 1.进入你的项目已构建的目录，例如你的项目名叫 example
+// Step 1: Go to your project’s built directory (for example, project “example”)
+// 2.在 example 目录下找到构建好的目录，例如 dist
+// Step 2: In the example directory, locate your built folder, usually “dist”
 // cd dist
-// 3.在dist目录下执行pwas命令，默认会自动寻找index.html 【default entry file: index.html】
-// run pwas
-// 4.如果你的项目入口文件不是index.html【even you can custom entry file】
+// 3.在 dist 目录下执行 pwas 命令，默认自动寻找 index.html
+// Step 3: Run “pwas” inside dist — it automatically finds index.html
+// 4.如果入口文件不是 index.html，可自定义
+// Step 4: If your entry file isn’t index.html, specify it manually
 // pwas entry test.html
 ```
 
 # 使用方式二  【usage method 2】
 项目依赖安装，构建时自动添加相应的脚本
+(Install as a project dependency; add script for build automation)
 
 ``` bash
 // 1.进入你的项目己经构建的目录，例如你的项目名叫example;【open your Project folder】
+// Step 1: Enter your project's built directory, for example “example”
 // 2.安装NPM包到开发依赖
+// Step 2: Install the NPM package as a development dependency
 npm install pwas@latest -D
 // 3.配置package.json 执行脚本：【pwas build dist/index.html】
+// Step 3: Configure package.json to include build command “pwas build dist/index.html”
 // 【For example】
-// ...
   "scripts": {
     "dev": "webpack-dev-server --inline --progress --config build/webpack.dev.conf.js",
     "start": "npm run dev",
@@ -42,51 +67,69 @@ npm install pwas@latest -D
     "build": "node build/build.js && pwas build dist/index.html"
   },
   "dependencies": {
-    "babel-polyfill": "^6.26.0",
+    "babel-polyfill": "^6.26.0"
   },
-  "devDpendencies": {
-    "pwas": "^1.2.3",
+  "devDependencies": {
+    "pwas": "^1.2.3"
   }
 // ....   
-【"build": "node build/build.js && pwas build dist/index.html"】
- 可以使用类似上面的方式集成到生产环境自动化构建脚本后执行
+// 【"build": "node build/build.js && pwas build dist/index.html"】
+// 可以使用类似上面的方式集成到生产环境自动化构建脚本后执行
+// The above example can be integrated into your production automation build script
 ```
 
-# 使用自定义配置
-1.进行项目的根目录，等同于package.json文件所在目录
-2.全局安装pwas,如果己经全局安装过，可以跳过此步骤,直接执行pwas init
+# 使用自定义配置 / Custom Configuration
+	1.	进入项目的根目录，等同于 package.json 文件所在目录
+(Enter your project root directory, same as where package.json is located)
+	2.	全局安装 pwas，如果已经全局安装过，可跳过此步骤，直接执行 pwas init
+(Install pwas globally. If already installed, skip this step and run pwas init directly)
 ``` bash
   npm install pwas@latest -g
   pwas init
 ```
-3.此时在项目根目录中会生成一个.pwarc文件，可以在此文件中配置manifest.json文件或者注册文件名字的反向代理路径等
-4.修改icons图标请在默认生成的icons图片目录替换，后期加入自定义Icons路径功能
+	3.	此时在项目根目录中会生成 .pwarc 文件，可以在此文件中配置 manifest.json 文件或者注册文件名、反向代理路径等。
+(This command will generate a .pwarc file in the project root, where you can configure manifest.json, registration filenames, or reverse proxy paths.)
+	4.	修改 icons 图标请在默认生成的 icons 目录中替换，后期将加入自定义 Icons 路径功能。
+(To replace icons, update the files in the default icons folder. Support for custom icon paths will be added later.)
 
-# 配置参数说明
+# 配置参数说明 / Configuration Options
 
 ``` bash
-  "buildDir": "static/pwa/", // 构建之后生成的目录文件夹地址，PWA应用Manifest引用的默认图标和入口文件存放位置
+  "buildDir": "static/pwa/", // 构建后生成的目录文件夹地址
+  // Directory for PWA build output files
   "scope": "./", // 缓存的作用域范围
-  "redirectPath": "", // 如果项目在生产环境访问的地址使用了nginx反向代理，则需要使用此配置项，生成的结果参考entryScript配置项名称【默认entry_sw.js】
-  "registerFile": "sw.js", // 注册文件名称，可以自行修改，建议使用默认名称
-  "entryScript": "entry_sw.js", // 入口文件名称，可以自行修改，建议使用默认名称
-  "cacheName": "index", // PWA的缓存名称，生成效果参考开发工具，比如Chrome -> F12 -> Application -> Cache Storage
-  "iconUrl": "", // 手动配置PWA的ICON图标，打包时引用的第三方链接图片地址，打包时会下载替换默认的ICON图标
-  "createIcon": false, // 是否创建图标
-  "exclude": [], // 需要过滤排除的文件类型或者文件名，使用参考：['.png', 'test.jpg', 'filter.mp4']
-  "apiExclude": [], // 需要过滤排队的API接口地址，可以模糊输入API接口中带有的路由或者path名称，使用参考：['/api/test', '/api/device/list']
-  "manifest": // 参考PWA官方manifest配置说明 https://developer.mozilla.org/en-US/docs/Web/Manifest
+  // Scope of the Service Worker cache
+  "redirectPath": "", // 生产环境使用 Nginx 反向代理时需配置
+  // Required when using Nginx reverse proxy in production
+  "registerFile": "sw.js", // 注册文件名称
+  // Registration file name (default “sw.js”)
+  "entryScript": "entry_sw.js", // 入口文件名称
+  // Entry script file name (default “entry_sw.js”)
+  "cacheName": "index", // PWA 缓存名称
+  // PWA cache name shown in Chrome DevTools -> Application -> Cache Storage
+  "iconUrl": "", // 手动配置 PWA 的 ICON 图标 URL
+  // Manually specify icon URL (downloads and replaces default icons)
+  "createIcon": false, // 是否自动生成图标
+  // Whether to automatically generate icons
+  "exclude": [], // 排除缓存的文件类型
+  // Excluded files or file types (e.g. ['.png', 'test.jpg', 'filter.mp4'])
+  "apiExclude": [], // 排除缓存的 API 地址
+  // Excluded API endpoints (supports partial match, e.g. ['/api/test', '/api/device/list'])
+  "manifest": // 参考官方文档 https://developer.mozilla.org/en-US/docs/Web/Manifest
+  // See official PWA manifest documentation
 ```
 
 
-# 常见问题说明
-1.项目必须使用https协议
-2.注意合理处理跨域资源，目前暂时未做资源的跨域缓存处理，如果有使用cdn加速部分资源文件，请在header消息头中配置Access-Control-Allow-Origin：*
-3.项目在服务器上的资源路径如果配置了Nginx反向代理，导致默认路径不能正常访问，请在Nginx上配置好相关资源的反向映射,.pwarc文件中可以配置构建生成的目录位置和注册文件的反向代理位置
+# 常见问题说明/ FAQ
+1.	项目必须使用 HTTPS 协议
+(Project must use HTTPS — Service Workers require HTTPS except on localhost)
+	2.	注意合理处理跨域资源，目前暂未做跨域缓存处理。如果使用 CDN，请在 Header 中配置：
+(Cross-domain caching is not currently supported. If using CDN, ensure the response header includes:)
+``` bash
+Access-Control-Allow-Origin：*
+```
+	3.	如果服务器使用了 Nginx 反向代理，导致路径无法访问，请正确配置资源映射。.pwarc 文件可设置生成目录和注册文件路径。
+(If using Nginx reverse proxy causes access issues, configure correct path mapping. .pwarc can define build and registration paths.)
 
-PS:说明文档写的比较促忙，如果有看不懂的地方或者错误的地方可以到git上指出，谢谢
-
-
-
-
-
+PS: 说明文档写得比较匆忙，如有错误或不清楚的地方，请到 GitHub 提 issue。
+(Note: This document was written quickly — feel free to submit an issue on GitHub for corrections or clarifications.)

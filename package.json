@@ -1,22 +1,30 @@
 {
   "name": "pwas",
-  "version": "1.2.3",
-  "description": "助您将现有的spa单页应用项目轻松升级成为PWA应用",
-  "main": "pwa.es5.js",
+  "version": "1.2.4",
+  "description": "助您将现有的 SPA 单页应用项目轻松升级为 PWA 应用。",
+  "main": "pwa.modern.js",
   "bin": {
-    "pwas": "pwa.es5.js"
+    "pwas": "pwa.modern.js"
   },
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "type": "commonjs",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "babel pwa.js -o pwa.es5.js"
+    "build": "babel pwa.js -o pwa.es5.js",
+    "test": "node --version && echo \"No test specified\""
   },
   "author": "brian <505072907@qq.com>",
   "license": "MIT",
   "dependencies": {
-    "commander": "9.3.0",
-    "jimp": "0.16.1",
-    "jsdom": "19.0.0",
-    "terser": "5.14.2"
+    "commander": "^9.3.0",
+    "jimp": "^0.16.1",
+    "jsdom": "^19.0.0",
+    "terser": "^5.14.2"
+  },
+  "devDependencies": {
+    "@babel/cli": "^7.26.0",
+    "@babel/preset-env": "^7.26.0"
   },
   "keywords": [
     "ServiceWorker",
@@ -28,17 +36,12 @@
     "PWAs"
   ],
   "files": [
-    "package.json",
-    "pwa.es5.js",
     "pwa.js",
+    "pwa.es5.js",
+    "pwarc.json",
     "img",
-    "README.md",
-    "pwarc.json"
+    "README.md"
   ],
-  "devDependencies": {
-    "babel-cli": "^6.26.0",
-    "babel-preset-es2015": "^6.24.1"
-  },
   "repository": {
     "type": "git",
     "url": "https://github.com/youwasborntodo/pwas.git"

@@ -24,6 +24,9 @@ Using PWA’s caching mechanism is the first step to accelerating resource loadi
 项目第一次在浏览器中安装成功 service worker 之后，后期升级均是无感知加载。  
 Once the Service Worker is installed successfully in the browser, all subsequent upgrades are silently applied without user awareness.
 
+Service Worker正常载入后会在window对象上绑定一个全局方法 window.onInstallPWA ，可以使用此方法触发安装pwa的逻辑
+After the Service Worker is successfully loaded, a global method window.onInstallPWA will be bound to the window object. You can use this method to trigger the logic for installing the PWA.
+
 ---
 
 ## 使用方式一 【Usage Method 1】  

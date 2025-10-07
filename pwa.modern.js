@@ -334,7 +334,7 @@ async function createServiceWorkerFile(fileList) {
   }
 }
 
-// Create entry script that registers service worker and provides uninstall
+// Create entry script that registers service worker and provides uninstall and PWA install prompt handler
 async function createEntryScript() {
   const entryScriptPath = resolveProjectPath(config.relativeFilePath, config.buildDir, config.entryScript);
   const manifestFetch = config.manifestUrl ? config.manifestUrl : `${config.redirectPath}/manifest.json`;
@@ -343,12 +343,29 @@ async function createEntryScript() {
       navigator.serviceWorker.register('${path.posix.join(config.redirectPath, config.registerFile)}', { scope: "${config.scope}"})
         .then(res => console.log('service worker is registered', res))
         .catch(err => console.error('service worker register fail', err));
-    }
-    window.uninstallServiceWorker = function(cacheName) {
-      navigator.serviceWorker.getRegistration().then(reg => {
-        if (!reg) return;
-        reg.unregister();
-      }).catch(err => console.error(err));
+      let deferredPrompt;
+      window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        deferredPrompt = e;
+        console.log('PWA install prompt captured');
+      });
+
+      window.onInstallPWA = async () => {
+        if (!deferredPrompt) {
+          console.log('No install prompt available');
+          return;
+        }
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        console.log(outcome === 'accepted' ? 'PWA installation accepted' : 'PWA installation dismissed');
+        deferredPrompt = null;
+      };
+      window.uninstallServiceWorker = function(cacheName) {
+        navigator.serviceWorker.getRegistration().then(reg => {
+          if (!reg) return;
+          reg.unregister();
+        }).catch(err => console.error(err));
+      }
     }
   `;
   await writeFileSafe(entryScriptPath, entryContent);

@@ -243,9 +243,9 @@ function getAttrList(node, attrFileList) {
 // Write service worker file using fileList and config
 async function createServiceWorkerFile(fileList) {
   // build SW content with caching list, exclude, apiExclude
-  const edition = `pwas[${config.cacheName}]@${new Date().toISOString()}`;
+  const buildTime = new Date().toLocaleString().replace(' ', '|');
   let swData = `
-    const edition = '${edition}';
+    const edition = 'pwas[${config.cacheName}]@${buildTime}'
     const fileList = [\n${fileList.map(f => `      '${f.replace(/^\//, '')}',`).join('\n')}\n    ];
   `;
   // exclude arrays

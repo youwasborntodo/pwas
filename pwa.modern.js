@@ -117,31 +117,29 @@ async function loadPwarc() {
     config.isConfig = true;
     // merge parsed into config
     config = { ...config, ...parsed };
-    // ensure nested manifest merges
+    // ensure nested manifest merges (but ignore icons)
     if (parsed.manifest) {
-      config.manifest = parsed.manifest;
+      // Remove icons from parsed manifest if present
+      const { icons, ...restManifest } = parsed.manifest;
+      config.manifest = { ...restManifest };
     }
-    Manifest = config.manifest;
-    // populate iconList and rewrite icon src to include buildDir/iconsPath prefix
-    iconList = [];
-    if (Manifest && Array.isArray(Manifest.icons)) {
-      Manifest.icons.forEach((img) => {
-        iconList.push(img.src);
-        img.src = path.posix.join(config.buildDir, config.iconsPath, img.src);
-      });
-    }
+    // Always use DEFAULT_CONFIG.manifest.icons
+    Manifest = { ...config.manifest };
+    Manifest.icons = DEFAULT_CONFIG.manifest.icons.map(img => ({
+      ...img,
+      src: path.posix.join(config.buildDir, config.iconsPath, img.src)
+    }));
+    iconList = Manifest.icons.map(img => path.basename(img.src));
     log.info('使用 pwarc.json 配置');
   } catch (err) {
     // no config, use defaults
     log.info('.pwarc/pwarc.json 未找到，使用默认配置');
-    Manifest = config.manifest;
-    iconList = [];
-    if (Manifest && Array.isArray(Manifest.icons)) {
-      Manifest.icons.forEach(img => {
-        iconList.push(img.src);
-        img.src = path.posix.join(config.buildDir, config.iconsPath, img.src);
-      });
-    }
+    Manifest = { ...config.manifest };
+    Manifest.icons = DEFAULT_CONFIG.manifest.icons.map(img => ({
+      ...img,
+      src: path.posix.join(config.buildDir, config.iconsPath, img.src)
+    }));
+    iconList = Manifest.icons.map(img => path.basename(img.src));
   }
 }
 
@@ -155,15 +153,18 @@ async function loadProjectPwarc() {
       const raw = await fs.promises.readFile(candidate, 'utf-8');
       const parsed = JSON.parse(raw);
       config = { ...config, ...parsed };
-      if (parsed.manifest) config.manifest = parsed.manifest;
-      Manifest = config.manifest;
-      iconList = [];
-      if (Manifest && Array.isArray(Manifest.icons)) {
-        Manifest.icons.forEach(img => {
-          iconList.push(img.src);
-          img.src = path.posix.join(config.buildDir, config.iconsPath, img.src);
-        });
+      // Only use manifest fields except icons
+      if (parsed.manifest) {
+        const { icons, ...restManifest } = parsed.manifest;
+        config.manifest = { ...restManifest };
       }
+      // Always use DEFAULT_CONFIG.manifest.icons
+      Manifest = { ...config.manifest };
+      Manifest.icons = DEFAULT_CONFIG.manifest.icons.map(img => ({
+        ...img,
+        src: path.posix.join(config.buildDir, config.iconsPath, img.src)
+      }));
+      iconList = Manifest.icons.map(img => path.basename(img.src));
       config.isConfig = true;
       log.info(`读取项目配置 ${candidate}`);
     }

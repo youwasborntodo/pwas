@@ -15,10 +15,13 @@
 
 const fs = require('fs');
 const path = require('path');
+// 系统平台判断
+const isWindows = process.platform === 'win32';
+
 const { Command } = require('commander');
 const program = new Command();
 const chalk = require('chalk');
-const jimp = require('jimp');
+const { Jimp } = require('jimp');
 const terser = require('terser');
 const { JSDOM } = require('jsdom');
 
@@ -36,6 +39,8 @@ const log = {
   warn: (msg) => console.warn(chalk.yellow('[WARN]'), msg),
   error: (msg) => console.error(chalk.red('[ERROR]'), msg)
 };
+
+console.log('[INFO] 当前系统平台:', isWindows ? 'Windows' : 'Unix/Linux/macOS');
 
 // Default configuration (will be overridden by .pwarc if exists)
 const DEFAULT_CONFIG = {
@@ -193,8 +198,10 @@ function readFileList(dir, filesList = []) {
         if (stat.isDirectory()) {
           readFileList(path.join(dir, item), filesList);
         } else {
-          const relativePath = fullPath.replace(config.relativePath, '').replace(/\\/g, '/').replace(/^\//, '');
-          // ensure leading slash removed, match original behavior using relative URLs starting without /
+          // Use path.relative for cross-platform, then convert to posix
+          let relativePath = path.relative(config.relativePath, fullPath);
+          relativePath = relativePath.split(path.sep).join('/'); // convert to posix
+          relativePath = relativePath.replace(/^\//, '');
           filesList.push(relativePath);
         }
       }
@@ -280,28 +287,33 @@ async function createServiceWorkerFile(fileList) {
       );
     });
 
-    function deleteCache() {
-      caches.keys().then(list => {
-        return Promise.all(
-          list.filter(cacheName => {
-            if (cacheName.includes('@')) {
-              const cacheTime = cacheName.split('@')[1];
-              const cacheLabel = cacheName.split('@')[0];
-              const editionLabel = edition.split('@')[0];
-              const editionTime = edition.split('@')[1];
-              if (cacheLabel === editionLabel) {
-                return cacheTime !== editionTime;
-              }
-            } else {
-              return cacheName !== edition;
+    async function deleteCache() {
+      try {
+        const keys = await caches.keys();
+        await Promise.all(
+          keys.map(async (cacheName) => {
+            if (!cacheName.startsWith('pwas[')) return;
+            const [label, time] = cacheName.split('@');
+            const [editionLabel, editionTime] = edition.split('@');
+            if (label === editionLabel && time !== editionTime) {
+              await caches.delete(cacheName);
+              console.log('清除旧版本缓存:', cacheName);
             }
-          }).map(cacheName => caches.delete(cacheName))
+          })
         );
-      }).catch(err => console.error(err));
+      } catch (err) {
+        console.error('清理缓存失败:', err);
+      }
     }
 
-    self.addEventListener('activate', e => {
-      e.waitUntil(deleteCache());
+    self.addEventListener('activate', (event) => {
+      event.waitUntil(
+        (async () => {
+          await deleteCache();
+          await self.clients.claim(); // 立即接管控制权
+          console.log('Service Worker 激活完成');
+        })()
+      );
     });
 
     self.addEventListener('fetch', e => {
@@ -332,7 +344,7 @@ async function createServiceWorkerFile(fileList) {
   try {
     const minified = terser.minify(swData, { toplevel: true });
     const swOut = minified && minified.code ? minified.code : swData;
-    const swPath = resolveProjectPath(config.relativeFilePath, config.registerFile);
+    const swPath = path.join(config.relativePath, config.relativeFilePath, config.registerFile);
     await writeFileSafe(swPath, swOut);
   } catch (err) {
     log.error(`生成 service worker 失败: ${err.message}`);
@@ -341,8 +353,9 @@ async function createServiceWorkerFile(fileList) {
 
 // Create entry script that registers service worker and provides uninstall and PWA install prompt handler
 async function createEntryScript() {
-  const entryScriptPath = resolveProjectPath(config.relativeFilePath, config.buildDir, config.entryScript);
-  const manifestFetch = config.manifestUrl ? config.manifestUrl : `${config.redirectPath}/manifest.json`;
+  const entryScriptPath = path.join(config.relativePath, config.relativeFilePath, config.buildDir, config.entryScript);
+  // manifestUrl logic for SW manifest update
+  const manifestUrlExpr = config.manifestUrl ? `'${config.manifestUrl}'` : 'null';
   const entryContent = `
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('${path.posix.join(config.redirectPath, config.registerFile)}', { scope: "${config.scope}"})
@@ -371,6 +384,29 @@ async function createEntryScript() {
           reg.unregister();
         }).catch(err => console.error(err));
       }
+
+      // Manifest fetch and update logic
+      const getManifestUrl = ${manifestUrlExpr};
+      if (getManifestUrl) {
+        try {
+          var xhr = new XMLHttpRequest();
+          xhr.open('GET', getManifestUrl, true);
+          xhr.responseType = 'blob';
+          xhr.onload = function() {
+            if (xhr.status === 200) {
+              var blob = xhr.response;
+              var url = URL.createObjectURL(blob);
+              var manifestLink = document.getElementById('insertManifest');
+              if (manifestLink) {
+                manifestLink.setAttribute('href', url);
+              }
+            }
+          };
+          xhr.send();
+        } catch (e) {
+          console.error('拉取manifest失败', e);
+        }
+      }
     }
   `;
   await writeFileSafe(entryScriptPath, entryContent);
@@ -379,7 +415,7 @@ async function createEntryScript() {
 // Create manifest.json and icons
 async function createManifestAndIcons() {
   try {
-    const iconsDir = resolveProjectPath(config.relativeFilePath, config.buildDir, config.iconsPath);
+    const iconsDir = path.join(config.relativePath, config.relativeFilePath, config.buildDir, config.iconsPath);
     await ensureDir(iconsDir);
 
     // If iconUrl provided, download and generate sized icons via jimp
@@ -398,7 +434,8 @@ async function createManifestAndIcons() {
       ];
       for (const data of sizeList) {
         try {
-          const img = await jimp.read(tmpSource);
+          const buffer = Buffer.from(await fs.promises.readFile(tmpSource));
+          const img = await Jimp.read(buffer);
           img.resize(data.size, data.size).quality(100);
           await img.writeAsync(path.join(iconsDir, data.name));
         } catch (e) {
@@ -428,7 +465,7 @@ async function createManifestAndIcons() {
     }
 
     // write manifest.json to relativeFilePath (project root + relativeFilePath)
-    const manifestPath = resolveProjectPath(config.relativeFilePath, 'manifest.json');
+    const manifestPath = path.join(config.relativePath, config.relativeFilePath, 'manifest.json');
     // Manifest already had icons modified earlier in load functions to include buildDir/iconsPath prefix
     const manifestData = JSON.stringify(Manifest, null, 2);
     await writeFileSafe(manifestPath, manifestData);
@@ -595,7 +632,7 @@ async function createManifestAndIcons() {
 async function createManifestAndIconsInner() {
   // Implementation above already exists; to avoid duplication, we move its logic here.
   try {
-    const iconsDir = resolveProjectPath(config.relativeFilePath, config.buildDir, config.iconsPath);
+    const iconsDir = path.join(config.relativePath, config.relativeFilePath, config.buildDir, config.iconsPath);
     await ensureDir(iconsDir);
 
     // If iconUrl provided, download and generate via jimp
@@ -613,11 +650,15 @@ async function createManifestAndIconsInner() {
       ];
       for (const s of sizes) {
         try {
-          const img = await jimp.read(tmp);
-          img.resize(s.size, s.size).quality(100);
-          await img.writeAsync(path.join(iconsDir, s.name));
+          const buffer = await fs.promises.readFile(tmp);
+          const mod = await import('jimp');
+          const JimpInstance = mod.Jimp || mod.default || mod;
+          const img = await JimpInstance.read(buffer);
+          await img.resize({ w: s.size, h: s.size });
+          await img.write(path.join(iconsDir, s.name));
+          log.success(`✅ 成功生成 ${s.name}`);
         } catch (e) {
-          log.error(`生成icon ${s.name} 失败: ${e.message}`);
+          log.error(`生成icon ${s.name} 失败: ${e.stack || e.message}`);
         }
       }
       try { await fs.promises.unlink(tmp); } catch (e) {}
@@ -640,7 +681,7 @@ async function createManifestAndIconsInner() {
       }
     }
     // write manifest.json
-    const manifestFilePath = resolveProjectPath(config.relativeFilePath, 'manifest.json');
+    const manifestFilePath = path.join(config.relativePath, config.relativeFilePath, 'manifest.json');
     const manifestData = JSON.stringify(Manifest, null, 2);
     await writeFileSafe(manifestFilePath, manifestData);
     return true;
@@ -670,14 +711,23 @@ program
   .action(async () => {
     config.isDefault = false;
     const sample = {
-      ...DEFAULT_CONFIG,
+      buildDir: "static/pwa/",
+      scope: "./",
+      redirectPath: "",
+      registerFile: "sw.js",
+      entryScript: "entry_sw.js",
+      cacheName: "index",
+      iconUrl: "",
+      createIcon: false,
+      exclude: [],
+      apiExclude: [],
       manifest: {
-        name: DEFAULT_CONFIG.manifest.name,
-        short_name: DEFAULT_CONFIG.manifest.short_name,
-        description: DEFAULT_CONFIG.manifest.description,
-        start_url: DEFAULT_CONFIG.manifest.start_url,
-        display: DEFAULT_CONFIG.manifest.display,
-        orientation: DEFAULT_CONFIG.manifest.orientation
+        name: "PWAs应用",
+        short_name: "PWAs",
+        description: "这只是一个测试应用！",
+        start_url: "index.html",
+        display: "standalone",
+        orientation: "any"
       }
     };
     const target = path.join(process.cwd(), 'pwarc.json');

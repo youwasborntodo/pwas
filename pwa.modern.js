@@ -61,6 +61,11 @@ const DEFAULT_CONFIG = {
   relativePath: process.cwd(),
   manifest: {
     name: 'PWAs应用',
+    "short_name": "PWAs",
+    "description": "这只是一个测试应用！",
+    "start_url": "index.html",
+    "display": "standalone",
+    "orientation": "any",
     icons: [
       { src: 'icon_ss.png', sizes: '32x32', type: 'image/png' },
       { src: 'icon_s.png', sizes: '48x48', type: 'image/png' },
@@ -666,9 +671,16 @@ program
     config.isDefault = false;
     const sample = {
       ...DEFAULT_CONFIG,
-      manifest: DEFAULT_CONFIG.manifest
+      manifest: {
+        name: DEFAULT_CONFIG.manifest.name,
+        short_name: DEFAULT_CONFIG.manifest.short_name,
+        description: DEFAULT_CONFIG.manifest.description,
+        start_url: DEFAULT_CONFIG.manifest.start_url,
+        display: DEFAULT_CONFIG.manifest.display,
+        orientation: DEFAULT_CONFIG.manifest.orientation
+      }
     };
-    const target = path.join(__dirname, 'pwarc.json');
+    const target = path.join(process.cwd(), 'pwarc.json');
     await writeFileSafe(target, JSON.stringify(sample, null, 2));
     log.success(`生成配置文件: ${target}`);
   });

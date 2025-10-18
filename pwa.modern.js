@@ -20,7 +20,6 @@ const program = new Command();
 const chalk = require('chalk');
 const jimp = require('jimp');
 const terser = require('terser');
-const request = require('request');
 const { JSDOM } = require('jsdom');
 
 const PKG = (() => {
@@ -434,22 +433,21 @@ async function createManifestAndIcons() {
   }
 }
 
-// download stream helper
+// download stream helper (use native https)
 function streamRequestToFile(url, destPath) {
+  const https = require('https');
   return new Promise((resolve, reject) => {
-    try {
-      const writeStream = fs.createWriteStream(destPath);
-      const req = request.get(url);
-      req.on('error', (err) => {
-        writeStream.destroy();
-        reject(err);
-      });
-      writeStream.on('finish', () => resolve(true));
-      writeStream.on('error', (err) => reject(err));
-      req.pipe(writeStream);
-    } catch (err) {
-      reject(err);
-    }
+    const file = fs.createWriteStream(destPath);
+    https.get(url, (response) => {
+      if (response.statusCode !== 200) {
+        reject(new Error(`HTTP 状态码 ${response.statusCode}`));
+        return;
+      }
+      response.pipe(file);
+      file.on('finish', () => file.close(() => resolve(true)));
+    }).on('error', (err) => {
+      fs.unlink(destPath, () => reject(err));
+    });
   });
 }
 

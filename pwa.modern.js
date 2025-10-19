@@ -14,7 +14,7 @@
  */
 
 const fs = require('fs');
-const path = require('path');
+const path = require('path'); 
 // 系统平台判断
 const isWindows = process.platform === 'win32';
 
@@ -258,7 +258,12 @@ async function createServiceWorkerFile(fileList) {
   const buildTime = new Date().toLocaleString().replace(' ', '|');
   let swData = `
     const edition = 'pwas[${config.cacheName}]@${buildTime}'
-    const fileList = [\n${fileList.map(f => `      '${f.replace(/^\//, '')}',`).join('\n')}\n    ];
+    const fileList = [\n${fileList.map(f => {
+      if (/^https?:\/\//.test(f) || f.startsWith('//')) {
+        return `      '${f}',`;
+      }
+      return `      '/${f.replace(/^\/+/, '')}',`;
+    }).join('\n')}\n    ];
   `;
   // exclude arrays
   if (Array.isArray(config.exclude) && config.exclude.length) {
@@ -276,13 +281,22 @@ async function createServiceWorkerFile(fileList) {
   swData += `
     self.addEventListener('install', e => {
       e.waitUntil(
-        caches.open(edition).then(cache => {
-          return Promise.all(
-            fileList.filter(f => {
+        caches.open(edition).then(async cache => {
+          for (const f of fileList) {
+            try {
               const fileName = f.split('/').pop().split('?')[0];
-              return !exclude.includes(fileName);
-            }).map(f => cache.add(f))
-          );
+              if (exclude.includes(fileName)) continue;
+              const req = new Request(f, { mode: 'no-cors' });
+              const res = await fetch(req);
+              if (res.ok || res.type === 'opaque') {
+                await cache.put(f, res.clone());
+              } else {
+                console.warn('⚠️ 响应状态异常，跳过缓存:', f, res.status);
+              }
+            } catch (err) {
+              console.warn('❌ 缓存失败:', f, err);
+            }
+          }
         })
       );
     });
@@ -590,10 +604,25 @@ async function entryFile(file) {
       return p.replace(/^\//, '');
     });
 
-    // scan project files (to include static assets)
-    const filesFromScan = readFileList(config.relativePath, []);
-    // merge both lists and dedupe
-    const merged = Array.from(new Set([...normalizedList, ...filesFromScan]));
+    // 仅从入口文件所在目录开始递归扫描文件，而不是整个项目
+    const baseDir = path.join(config.relativePath, config.relativeFilePath);
+    let filesFromScan = readFileList(baseDir, []);
+    // 动态去除入口文件所在层级之前的路径，使缓存路径从入口文件所在目录开始
+    if (config.relativeFilePath) {
+      const baseDirNorm = config.relativeFilePath.replace(/^\.\//, '').replace(/\/$/, '');
+      const baseDirReg = new RegExp(`^${baseDirNorm ? baseDirNorm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/' : ''}`);
+      filesFromScan = filesFromScan.map(f => f.replace(baseDirReg, ''));
+    }
+
+    // 合并入口 HTML 中引用的资源与当前目录构建产物
+    const merged = Array.from(
+      new Set(
+        [
+          ...normalizedList.filter(p => !/^https?:\/\//.test(p) && !p.startsWith('//')),
+          ...filesFromScan
+        ]
+      )
+    ).filter(file => !exceptFile.some(ex => file.includes(ex)));
 
     // create icons and manifest
     // set Manifest icons src to include buildDir/iconsPath prefixes

@@ -1,6 +1,6 @@
 {
   "name": "pwas",
-  "version": "1.2.7",
+  "version": "1.2.8",
   "description": "助您将现有的 SPA 单页应用项目轻松升级为 PWA 应用。",
   "main": "pwa.modern.js",
   "bin": {

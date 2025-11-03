@@ -21,7 +21,7 @@ const isWindows = process.platform === 'win32';
 const { Command } = require('commander');
 const program = new Command();
 const chalk = require('chalk');
-const { Jimp } = require('jimp');
+let cachedJimpModule = null;
 const terser = require('terser');
 const { JSDOM } = require('jsdom');
 
@@ -87,10 +87,29 @@ let config = { ...DEFAULT_CONFIG };
 let Manifest = {};
 let iconList = [];
 let bufferList = [];
-const exceptFile = ['node_modules', 'package.json', config.entryScript];
+const BASE_EXCLUDE = ['node_modules', 'package.json'];
 
 function resolveProjectPath(...parts) {
   return path.join(config.relativePath, ...parts);
+}
+
+async function loadJimp() {
+  if (cachedJimpModule) return cachedJimpModule;
+  let requireError;
+  try {
+    const required = require('jimp');
+    cachedJimpModule = required.Jimp || required.default || required;
+    return cachedJimpModule;
+  } catch (err) {
+    requireError = err;
+  }
+  try {
+    const mod = await import('jimp');
+    cachedJimpModule = mod.Jimp || mod.default || mod;
+    return cachedJimpModule;
+  } catch (importErr) {
+    throw requireError || importErr;
+  }
 }
 
 // Helper: ensure directory exists (recursive)
@@ -194,7 +213,7 @@ function readFileList(dir, filesList = []) {
     try {
       const fullPath = path.join(dir, item);
       const stat = fs.statSync(fullPath);
-      if (!exceptFile.includes(item)) {
+      if (!BASE_EXCLUDE.some(ex => item.includes(ex)) && item !== config.entryScript) {
         if (stat.isDirectory()) {
           readFileList(path.join(dir, item), filesList);
         } else {
@@ -256,13 +275,41 @@ function getAttrList(node, attrFileList) {
 async function createServiceWorkerFile(fileList) {
   // build SW content with caching list, exclude, apiExclude
   const buildTime = new Date().toLocaleString().replace(' ', '|');
+  const normalizeLocalPath = (filePath) => {
+    const cleaned = filePath.replace(/^\.\//, '').replace(/^\/+/, '');
+    const redirect = (config.redirectPath || '')
+      .replace(/^\.\//, '')
+      .replace(/^\/+/, '')
+      .replace(/\/+$/, '');
+    const relative = (config.relativeFilePath || '')
+      .replace(/^\.\//, '')
+      .replace(/\/+$/, '');
+    const segments = [];
+
+    const hasPrefix = (value, prefix) => {
+      if (!prefix) return false;
+      return value === prefix || value.startsWith(`${prefix}/`);
+    };
+
+    if (redirect && !hasPrefix(cleaned, redirect)) {
+      segments.push(redirect);
+    }
+    if (relative && !hasPrefix(cleaned, relative) && !segments.includes(relative)) {
+      segments.push(relative);
+    }
+
+    segments.push(cleaned);
+    const joined = path.posix.join(...segments.filter(Boolean));
+    return `/${joined}`.replace(/\/{2,}/g, '/');
+  };
+
   let swData = `
     const edition = 'pwas[${config.cacheName}]@${buildTime}'
     const fileList = [\n${fileList.map(f => {
       if (/^https?:\/\//.test(f) || f.startsWith('//')) {
         return `      '${f}',`;
       }
-      return `      '/${f.replace(/^\/+/, '')}',`;
+      return `      '${normalizeLocalPath(f)}',`;
     }).join('\n')}\n    ];
   `;
   // exclude arrays
@@ -432,11 +479,9 @@ async function createManifestAndIcons() {
     const iconsDir = path.join(config.relativePath, config.relativeFilePath, config.buildDir, config.iconsPath);
     await ensureDir(iconsDir);
 
-    // If iconUrl provided, download and generate sized icons via jimp
     if (config.iconUrl) {
       const tmpSource = path.join(iconsDir, 'iconSource.png');
       await streamRequestToFile(config.iconUrl, tmpSource);
-      // generate required sizes (reverse order to preserve original behavior)
       const sizeList = [
         { name: 'icon_ss.png', size: 32 },
         { name: 'icon_s.png', size: 64 },
@@ -446,63 +491,122 @@ async function createManifestAndIcons() {
         { name: 'icon_x.png', size: 192 },
         { name: 'icon_xx.png', size: 256 }
       ];
+      const sourceBuffer = await fs.promises.readFile(tmpSource);
+      const JimpLib = await loadJimp();
       for (const data of sizeList) {
         try {
-          const buffer = Buffer.from(await fs.promises.readFile(tmpSource));
-          const img = await Jimp.read(buffer);
-          img.resize(data.size, data.size).quality(100);
-          await img.writeAsync(path.join(iconsDir, data.name));
+          const img = await JimpLib.read(sourceBuffer);
+          await img.resize({ w: data.size, h: data.size });
+          const target = path.join(iconsDir, data.name);
+          await new Promise((resolve, reject) => {
+            img.write(target, (err) => (err ? reject(err) : resolve(true)));
+          });
+          log.success(`✅ 成功生成 ${data.name}`);
         } catch (e) {
           log.error(`生成 icon ${data.name} 失败: ${e.message}`);
         }
       }
-      // remove source
-      try { await fs.promises.unlink(tmpSource); } catch(e) {}
+      try { await fs.promises.unlink(tmpSource); } catch (e) {}
     } else {
-      // use local icons from package img/ if exists
       const pkgImgDir = path.join(__dirname, 'img');
       for (const src of iconList) {
-        const fileName = src.split('/').pop();
-        const srcPath = path.join(__dirname, 'img', fileName);
+        const fileName = path.basename(src);
+        const srcPath = path.join(pkgImgDir, fileName);
         const dest = path.join(iconsDir, fileName);
-        try {
-          if (fs.existsSync(srcPath)) {
+        if (fs.existsSync(srcPath)) {
+          try {
             await fs.promises.copyFile(srcPath, dest);
-          } else {
-            // If not found in package, ignore; user may provide icons elsewhere
-            log.warn(`本地 icon 未找到：${srcPath}`);
+          } catch (e) {
+            log.warn(`复制icon失败: ${e.message}`);
           }
-        } catch (e) {
-          log.error(`复制 icon 失败: ${e.message}`);
+        } else {
+          log.warn(`未找到包内 icon: ${srcPath}`);
         }
       }
     }
 
-    // write manifest.json to relativeFilePath (project root + relativeFilePath)
     const manifestPath = path.join(config.relativePath, config.relativeFilePath, 'manifest.json');
-    // Manifest already had icons modified earlier in load functions to include buildDir/iconsPath prefix
     const manifestData = JSON.stringify(Manifest, null, 2);
     await writeFileSafe(manifestPath, manifestData);
     log.success('manifest.json 和 icons 已生成');
+    return true;
   } catch (err) {
     log.error(`createManifestAndIcons 失败: ${err.message}`);
+    return false;
   }
 }
 
-// download stream helper (use native https)
-function streamRequestToFile(url, destPath) {
-  const https = require('https');
+// download stream helper (supports http/https with basic redirect handling)
+function streamRequestToFile(url, destPath, redirectCount = 0) {
   return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(destPath);
-    https.get(url, (response) => {
-      if (response.statusCode !== 200) {
-        reject(new Error(`HTTP 状态码 ${response.statusCode}`));
+    let parsedUrl;
+    try {
+      parsedUrl = new URL(url);
+    } catch (err) {
+      reject(err);
+      return;
+    }
+
+    let fileStream;
+    let settled = false;
+    const safeResolve = (value) => {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    };
+    const safeReject = (err) => {
+      if (settled) return;
+      settled = true;
+      reject(err);
+    };
+
+    const cleanupFile = () => {
+      if (!fileStream) return Promise.resolve();
+      const streamToClose = fileStream;
+      fileStream = undefined;
+      streamToClose.destroy();
+      return fs.promises.unlink(destPath).catch(() => {});
+    };
+
+    const client = parsedUrl.protocol === 'http:' ? require('http') : require('https');
+    const request = client.get(parsedUrl, (response) => {
+      if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        if (redirectCount > 5) {
+          response.resume();
+          safeReject(new Error('HTTP 重定向次数过多'));
+          return;
+        }
+        const nextUrl = new URL(response.headers.location, parsedUrl).toString();
+        response.resume();
+        cleanupFile().finally(() => {
+          streamRequestToFile(nextUrl, destPath, redirectCount + 1).then(safeResolve).catch(safeReject);
+        });
         return;
       }
-      response.pipe(file);
-      file.on('finish', () => file.close(() => resolve(true)));
-    }).on('error', (err) => {
-      fs.unlink(destPath, () => reject(err));
+
+      if (response.statusCode !== 200) {
+        response.resume();
+        safeReject(new Error(`HTTP 状态码 ${response.statusCode}`));
+        return;
+      }
+
+      fileStream = fs.createWriteStream(destPath);
+      const onStreamError = (err) => {
+        cleanupFile().finally(() => safeReject(err));
+      };
+
+      fileStream.on('error', onStreamError);
+      response.on('error', onStreamError);
+      fileStream.on('finish', () => {
+        const streamToClose = fileStream;
+        fileStream = undefined;
+        streamToClose.close(() => safeResolve(true));
+      });
+      response.pipe(fileStream);
+    });
+
+    request.on('error', (err) => {
+      cleanupFile().finally(() => safeReject(err));
     });
   });
 }
@@ -622,7 +726,7 @@ async function entryFile(file) {
           ...filesFromScan
         ]
       )
-    ).filter(file => !exceptFile.some(ex => file.includes(ex)));
+    ).filter(file => !BASE_EXCLUDE.some(ex => file.includes(ex)) && !file.endsWith(`/${config.entryScript}`) && file !== config.entryScript);
 
     // create icons and manifest
     // set Manifest icons src to include buildDir/iconsPath prefixes
@@ -649,74 +753,6 @@ async function entryFile(file) {
 
   } catch (err) {
     log.error(`entryFile 错误: ${err.message}`);
-  }
-}
-
-// create manifest and icons wrapper (already defined above but expose name)
-async function createManifestAndIcons() {
-  // reuse earlier function defined above — ensure it's declared only once
-  return createManifestAndIconsInner();
-}
-
-async function createManifestAndIconsInner() {
-  // Implementation above already exists; to avoid duplication, we move its logic here.
-  try {
-    const iconsDir = path.join(config.relativePath, config.relativeFilePath, config.buildDir, config.iconsPath);
-    await ensureDir(iconsDir);
-
-    // If iconUrl provided, download and generate via jimp
-    if (config.iconUrl) {
-      const tmp = path.join(iconsDir, 'iconSource.png');
-      await streamRequestToFile(config.iconUrl, tmp);
-      const sizes = [
-        { name: 'icon_ss.png', size: 32 },
-        { name: 'icon_s.png', size: 64 },
-        { name: 'icon.png', size: 96 },
-        { name: 'icon_m.png', size: 152 },
-        { name: 'apple-icon.png', size: 180 },
-        { name: 'icon_x.png', size: 192 },
-        { name: 'icon_xx.png', size: 256 }
-      ];
-      for (const s of sizes) {
-        try {
-          const buffer = await fs.promises.readFile(tmp);
-          const mod = await import('jimp');
-          const JimpInstance = mod.Jimp || mod.default || mod;
-          const img = await JimpInstance.read(buffer);
-          await img.resize({ w: s.size, h: s.size });
-          await img.write(path.join(iconsDir, s.name));
-          log.success(`✅ 成功生成 ${s.name}`);
-        } catch (e) {
-          log.error(`生成icon ${s.name} 失败: ${e.stack || e.message}`);
-        }
-      }
-      try { await fs.promises.unlink(tmp); } catch (e) {}
-    } else {
-      // copy from package img dir if exists
-      const pkgImgDir = path.join(__dirname, 'img');
-      for (const src of iconList) {
-        const fileName = path.basename(src);
-        const srcPath = path.join(pkgImgDir, fileName);
-        const dest = path.join(iconsDir, fileName);
-        if (fs.existsSync(srcPath)) {
-          try {
-            await fs.promises.copyFile(srcPath, dest);
-          } catch (e) {
-            log.warn(`复制icon失败: ${e.message}`);
-          }
-        } else {
-          log.warn(`未找到包内 icon: ${srcPath}`);
-        }
-      }
-    }
-    // write manifest.json
-    const manifestFilePath = path.join(config.relativePath, config.relativeFilePath, 'manifest.json');
-    const manifestData = JSON.stringify(Manifest, null, 2);
-    await writeFileSafe(manifestFilePath, manifestData);
-    return true;
-  } catch (err) {
-    log.error(`createManifestAndIconsInner 错误: ${err.message}`);
-    return false;
   }
 }
 

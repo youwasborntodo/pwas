@@ -20,7 +20,7 @@
     "commander": "^9.3.0",
     "jimp": "1.6.0",
     "chalk": "4.1.2",
-    "jsdom": "^19.0.0",
+    "jsdom": "^28.1.0",
     "terser": "^5.14.2"
   },
   "devDependencies": {
